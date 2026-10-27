@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from portfolio_maintenance.executor import docker_command, downloaded, minimal_environment
+from portfolio_maintenance.executor import docker_command, downloaded, minimal_environment, model_json
 
 
 def test_generated_execution_has_no_network_privileges_or_credentials(tmp_path, monkeypatch):
@@ -38,3 +38,19 @@ def test_runtime_flags_are_not_editable_by_generated_project_code():
     dockerfile = (root / "maintenance/Model.Dockerfile").read_text()
     assert "USER 10001:10001" in dockerfile
     assert "llama-completion" in dockerfile
+
+
+def test_completion_preserves_generated_token_output_while_suppressing_metadata(tmp_path, monkeypatch):
+    calls = []
+
+    def run_isolated(image, mounts, args, control, timeout):
+        calls.append(args)
+        return {"exit_code": 0, "truncated": False, "output": '{"approved":true,"findings":[]}\n[end of text]'}
+
+    monkeypatch.setattr("portfolio_maintenance.executor.isolated", run_isolated)
+    payload, evidence = model_json(tmp_path, tmp_path, tmp_path, "review", "Review identity", {"type": "object"})
+    assert payload["approved"] and evidence["role"] == "review"
+    assert "--log-disable" not in calls[0], (
+        "llama-completion emits generated tokens through generic LOG; disabling logs removes the answer"
+    )
+    assert calls[0][calls[0].index("--log-verbosity") + 1] == "0"
