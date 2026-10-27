@@ -128,6 +128,10 @@ def execute(
             timeout=budget,
         )
         evidence_path = output / evidence_name
+        if not evidence_path.is_file():
+            raise ValueError(
+                f"{label} exited {result['exit_code']} without JUnit evidence: {result['output'][-4000:]}"
+            )
         counts = junit_summary(evidence_path)
         record = {
             "name": label,

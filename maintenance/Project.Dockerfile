@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git libstdc++6 
 WORKDIR /work
 RUN mkdir -p /opt/maintenance
 COPY . .
-ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_PYTHON=/usr/local/bin/python UV_PYTHON_DOWNLOADS=never
 ARG EXTRA_DEV=0
 RUN if [ "$EXTRA_DEV" = "1" ]; then uv sync --frozen --extra dev; else uv sync --frozen; fi
 RUN uv pip install --python /opt/venv/bin/python --no-deps pytest-repeat==0.9.4

@@ -44,6 +44,8 @@ def test_dependency_locations_survive_the_readonly_source_mount():
     root = Path(__file__).resolve().parents[1]
     dockerfile = (root / "maintenance/Project.Dockerfile").read_text()
     assert "UV_PROJECT_ENVIRONMENT=/opt/venv" in dockerfile
+    assert "UV_PYTHON=/usr/local/bin/python" in dockerfile
+    assert "UV_PYTHON_DOWNLOADS=never" in dockerfile
     assert "mv frontend/node_modules /node_modules" in dockerfile
     assert "mv node_modules /node_modules" in dockerfile
 

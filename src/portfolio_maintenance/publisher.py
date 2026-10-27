@@ -33,7 +33,7 @@ def api(method: str, path: str, payload: dict | None = None):
                 raise ValueError("GitHub metadata response exceeds size budget")
             return json.loads(raw) if raw else {}
     except HTTPError as error:
-        if error.code == 404:
+        if error.code == 404 and method == "GET":
             return None
         raise RuntimeError(f"GitHub trusted publisher returned HTTP {error.code}") from None
 

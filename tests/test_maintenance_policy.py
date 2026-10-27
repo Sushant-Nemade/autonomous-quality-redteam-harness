@@ -99,3 +99,20 @@ def test_collection_and_environment_errors_are_not_a_red_regression(tmp_path):
     path = tmp_path / "error.xml"
     path.write_text('<testsuite><testcase name="broken"><error>import missing</error></testcase></testsuite>')
     assert not red_passed(1, junit_summary(path))
+
+
+def test_missing_write_endpoint_is_not_reported_as_success(monkeypatch):
+    from urllib.error import HTTPError
+
+    from portfolio_maintenance import publisher
+
+    def missing(*args, **kwargs):
+        raise HTTPError("https://api.github.com/fixture", 404, "missing", {}, None)
+
+    monkeypatch.setenv("GH_TOKEN", "fixture-only-not-a-real-token")
+    monkeypatch.setattr(publisher, "urlopen", missing)
+    assert publisher.api("GET", "repos/Sushant-Nemade/TravelBrain/git/ref/heads/missing") is None
+    with pytest.raises(RuntimeError, match="404"):
+        publisher.api(
+            "POST", "repos/Sushant-Nemade/TravelBrain/actions/workflows/missing/dispatches", {"ref": "main"}
+        )
