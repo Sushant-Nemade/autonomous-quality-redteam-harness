@@ -1,4 +1,12 @@
-# Autonomous Daily 9:00 AM TDD, Red-Team Pentest & 1,000-User Simulation Harness
+# Portfolio Maintenance And Legacy Quality Fixtures
+
+> **Activation status (2026-10-27):** a new evidence-backed noon Europe/Berlin
+> maintenance path is being validated. Daily AI execution is not yet activated.
+> The former three-trigger scheduled fixture replay is now manual-only.
+> **The fixed counts, pentest descriptions, dialogue and telemetry below are legacy
+> deterministic demonstration fixtures, NOT evidence that those projects were tested,
+> repaired or load-tested by this harness.** Actual maintenance will record source
+> SHAs, executed commands, observed JUnit cases, model provenance and outcomes.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11 | 3.12 | 3.13](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)

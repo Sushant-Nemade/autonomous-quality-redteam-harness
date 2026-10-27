@@ -13,10 +13,12 @@ dependencies = [
     "pydantic>=2.14,<3",
     "fastapi>=0.143.3,<0.144",
     "uvicorn>=0.54,<0.55",
+    "tzdata>=2025.2",
 ]
 
 [project.scripts]
 quality-harness = "harness.cli:main"
+portfolio-maintenance = "portfolio_maintenance.cli:main"
 
 [dependency-groups]
 dev = [
@@ -41,6 +43,7 @@ include-package-data = false
 
 [tool.setuptools.package-data]
 harness = ["py.typed", "site/*", "site/data/*"]
+portfolio_maintenance = ["registry.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

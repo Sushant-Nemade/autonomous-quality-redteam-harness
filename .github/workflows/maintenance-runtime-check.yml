@@ -1,0 +1,33 @@
+name: Verify Isolated Maintenance Runtime
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: maintenance-runtime-check
+  cancel-in-progress: false
+jobs:
+  verify-real-inference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.0'
+      - run: uv sync --frozen
+      - uses: actions/cache@v4
+        with:
+          path: .cache/maintenance
+          key: maintenance-model-f86cb2c1-llama-a9191799-v1
+      - run: uv run --frozen python scripts/check_maintenance_runtime.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isolated-maintenance-runtime-evidence
+          path: build/runtime-check/report.json
