@@ -136,3 +136,21 @@ def test_unavailable_global_switch_fails_closed(monkeypatch):
     monkeypatch.setattr(cli, "api", lambda *args: None)
     with pytest.raises(ValueError, match="unavailable"):
         cli.globally_paused()
+
+
+def test_monitor_does_not_alert_before_daily_cutoff(monkeypatch):
+    from portfolio_maintenance import cli
+
+    class Clock:
+        @staticmethod
+        def now(tz):
+            return datetime(2026, 10, 28, 8, tzinfo=timezone.utc)
+
+    def premature(*args):
+        raise AssertionError("Monitor must not inspect/create a missed-run incident before its deadline")
+
+    monkeypatch.setattr(cli, "datetime", Clock)
+    monkeypatch.setattr(cli, "globally_paused", lambda: False)
+    monkeypatch.setattr(cli, "api", premature)
+    result = cli.monitor("Sushant-Nemade/autonomous-quality-redteam-harness")
+    assert result["status"] == "not-due-before-cutoff"

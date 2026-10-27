@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from portfolio_maintenance.pipeline import execute
-from portfolio_maintenance.policy import local_date, profile_for, registry, run_key, selection
+from portfolio_maintenance.policy import EPOCH, ZONE, local_date, profile_for, registry, run_key, selection
 from portfolio_maintenance.publisher import api, publish
 
 
@@ -88,7 +88,10 @@ def run(args) -> dict:
 def monitor(control_repository: str) -> dict:
     if globally_paused():
         return {"paused": True, "status": "Global owner kill switch enabled; no missed-run alert"}
-    day = local_date()
+    current = datetime.now(timezone.utc).astimezone(ZONE)
+    day = current.date()
+    if day < EPOCH or current.hour < 15:
+        return {"berlin_date": day.isoformat(), "status": "not-due-before-cutoff"}
     expected = selection(day)
     key = run_key(expected.repository, day, False, "1")
     record = api("GET", f"repos/{expected.repository}/contents/runs/{key}.json?ref=maintenance-reports")
