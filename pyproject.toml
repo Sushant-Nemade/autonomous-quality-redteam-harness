@@ -1,7 +1,7 @@
 [project]
 name = "autonomous-quality-redteam-harness"
-version = "0.1.0"
-description = "Automated daily 9:00 AM TDD, End-to-End Integration, Red-Team Pentest Agent, Closed-Loop Improvement Agent, and 1,000-Virtual-User Concurrency & Flow Simulation Platform"
+version = "0.2.0"
+description = "Evidence-backed bounded portfolio maintenance with isolated offline AI, real TDD gates, measured workflows and reviewed PRs; legacy fixtures labeled"
 requires-python = ">=3.11"
 readme = "README.md"
 license = "MIT"

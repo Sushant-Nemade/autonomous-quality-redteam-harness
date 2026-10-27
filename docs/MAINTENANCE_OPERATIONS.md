@@ -4,7 +4,9 @@
 
 As of 2026-10-27, `daily-maintenance.yml` is published and GitHub reports its state
 as active in all seven gallery reference repositories. Each caller is pinned to
-controller revision `11586143dd21de383b969c5be09ae8808a5e3661`, including its registry.
+controller revision `dbe13f429cb7867d386d10f499e394a2d1d89948`, including its registry.
+This security maintenance pin includes `uv`0.13.4; the first complete pilot below
+ran the same proposal/model policy before that build-tool-only update.
 
 The shared schedule is **12:00 noon Europe/Berlin**, not midnight or 09:00.
 An epoch-based round robin selects one project per Berlin calendar day:
