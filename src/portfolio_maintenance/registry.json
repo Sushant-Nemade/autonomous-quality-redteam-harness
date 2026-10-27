@@ -1,7 +1,7 @@
 [
   {"repository":"Sushant-Nemade/ai-blog-publisher","file":"blogboard/services/storage.py","function":"StorageHistory.get_recent_history","integration":"tests/test_publishing.py","extra_dev":false,"ci":"ci.yml","load":null},
   {"repository":"Sushant-Nemade/gitpulse","file":"gitpulse/core.py","function":"Person.__post_init__","integration":"tests/test_api.py","extra_dev":false,"ci":"ci.yml","load":null},
-  {"repository":"Sushant-Nemade/Doclify","file":"doclify/utils/file_utils.py","function":"clean_cache","integration":"tests/test_cli.py","extra_dev":true,"ci":"ci.yml","load":null},
+  {"repository":"Sushant-Nemade/Doclify","file":"doclify/utils/file_utils.py","function":"clean_cache","integration":"tests/test_pipeline.py","extra_dev":true,"ci":"ci.yml","load":null},
   {"repository":"Sushant-Nemade/MarketInsight","file":"MarketInsight/research.py","function":"evidence_summary","integration":"tests/test_api.py","extra_dev":false,"ci":"verify.yml","load":null},
   {"repository":"Sushant-Nemade/TravelBrain","file":"src/utils/async_utils.py","function":"truncate","integration":"tests/test_api.py","extra_dev":false,"ci":"verify.yml","load":null},
   {"repository":"Sushant-Nemade/airbnb-price-workbench","file":"src/airbnb_price/contracts.py","function":"vector","integration":"tests/test_runtime.py","extra_dev":false,"ci":"verify.yml","load":null},

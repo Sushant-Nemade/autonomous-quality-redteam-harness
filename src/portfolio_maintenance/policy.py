@@ -145,7 +145,20 @@ def apply_proposal(source: str, proposal: Proposal, qualified: str) -> str:
 
 def validate_test(source: str, project: Profile) -> None:
     tree = ast.parse(source)
-    if not any(isinstance(item, ast.Assert) for item in ast.walk(tree)):
+    has_assertion = any(isinstance(item, ast.Assert) for item in ast.walk(tree))
+    has_expected_exception = any(
+        isinstance(item, ast.With)
+        and any(
+            isinstance(context.context_expr, ast.Call)
+            and isinstance(context.context_expr.func, ast.Attribute)
+            and isinstance(context.context_expr.func.value, ast.Name)
+            and context.context_expr.func.value.id == "pytest"
+            and context.context_expr.func.attr == "raises"
+            for context in item.items
+        )
+        for item in ast.walk(tree)
+    )
+    if not has_assertion and not has_expected_exception:
         raise ValueError("Regression must contain an actual assertion")
     allowed = {"pytest", project.file.split("/")[0], "src", "airbnb_price", "boston_housing"}
     imported = False

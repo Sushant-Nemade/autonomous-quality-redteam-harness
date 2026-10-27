@@ -5,10 +5,12 @@ COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 RUN apt-get update && apt-get install -y --no-install-recommends git libstdc++6 && rm -rf /var/lib/apt/lists/* && ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
 WORKDIR /work
+RUN mkdir -p /opt/maintenance
 COPY . .
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ARG EXTRA_DEV=0
 RUN if [ "$EXTRA_DEV" = "1" ]; then uv sync --frozen --extra dev; else uv sync --frozen; fi
+RUN uv pip install --python /opt/venv/bin/python --no-deps pytest-repeat==0.9.4
 RUN if [ -f frontend/package-lock.json ]; then npm --prefix frontend ci --ignore-scripts; elif [ -f package-lock.json ]; then npm ci --ignore-scripts; fi
 ENV PATH=/opt/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/work/src:/work HOME=/tmp OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
 USER 10001:10001

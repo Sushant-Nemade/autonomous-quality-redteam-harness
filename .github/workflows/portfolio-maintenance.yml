@@ -1,0 +1,135 @@
+name: Real Bounded Portfolio Maintenance
+on:
+  workflow_call:
+    inputs:
+      pilot:
+        type: boolean
+        default: false
+      controller_ref:
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: real-portfolio-maintenance
+  cancel-in-progress: false
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      selected: ${{ steps.select.outputs.selected }}
+      date: ${{ steps.select.outputs.date }}
+      key: ${{ steps.select.outputs.key }}
+      source_sha: ${{ steps.select.outputs.source_sha }}
+      skip_reason: ${{ steps.select.outputs.skip_reason }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Sushant-Nemade/autonomous-quality-redteam-harness
+          ref: ${{ inputs.controller_ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.0'
+      - run: uv sync --frozen
+      - id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAINTENANCE_DISABLED: ${{ vars.MAINTENANCE_DISABLED }}
+          PILOT: ${{ inputs.pilot }}
+        run: |
+          if [ "$PILOT" = "true" ]; then
+            uv run --frozen portfolio-maintenance preflight --pilot
+          else
+            uv run --frozen portfolio-maintenance preflight
+          fi
+  execute:
+    needs: select
+    if: needs.select.outputs.selected == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Sushant-Nemade/autonomous-quality-redteam-harness
+          ref: ${{ inputs.controller_ref }}
+          path: controller
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.select.outputs.source_sha }}
+          path: target
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.0'
+      - run: uv sync --frozen --project controller
+      - uses: actions/cache@v4
+        with:
+          path: .cache/maintenance
+          key: maintenance-model-f86cb2c1-llama-a9191799-v1
+      - env:
+          SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
+          RUN_DATE: ${{ needs.select.outputs.date }}
+          SKIP_REASON: ${{ needs.select.outputs.skip_reason }}
+        run: |
+          uv run --frozen --project controller portfolio-maintenance run \
+            --control "$GITHUB_WORKSPACE/controller" --target "$GITHUB_WORKSPACE/target" \
+            --work "$GITHUB_WORKSPACE/work" --cache "$GITHUB_WORKSPACE/.cache/maintenance" \
+            --repository "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" \
+            --date "$RUN_DATE" --run-id "$GITHUB_RUN_ID" --skip-reason "$SKIP_REASON"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verified-maintenance-evidence
+          retention-days: 30
+          path: |
+            work/report.json
+            work/candidate.json
+            work/evidence
+  publish:
+    needs: [select, execute]
+    if: needs.select.outputs.selected == 'true' && needs.execute.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Sushant-Nemade/autonomous-quality-redteam-harness
+          ref: ${{ inputs.controller_ref }}
+          path: controller
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.select.outputs.source_sha }}
+          path: baseline
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-maintenance-evidence
+          path: work
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.0'
+      - run: uv sync --frozen --project controller
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT_KEY: ${{ needs.select.outputs.key }}
+        run: |
+          uv run --frozen --project controller portfolio-maintenance publish \
+            --work "$GITHUB_WORKSPACE/work" --baseline "$GITHUB_WORKSPACE/baseline" --key "$REPORT_KEY"
+          cat work/summary.md >> "$GITHUB_STEP_SUMMARY"
