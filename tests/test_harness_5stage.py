@@ -106,4 +106,8 @@ def test_cli_check_and_fastapi_endpoints() -> None:
 
     root = client.get("/")
     assert root.status_code == 200
-    assert "Autonomous TDD, Red-Team Pentest" in root.text
+    assert "<h1>Portfolio Maintenance</h1>" in root.text
+    assert 'class="panel active" id="panel-maintenance"' in root.text
+    assert "Legacy deterministic fixtures only" in root.text
+    assert "Missing evidence is not a pass" in root.text
+    assert "No automatic production merge" in root.text

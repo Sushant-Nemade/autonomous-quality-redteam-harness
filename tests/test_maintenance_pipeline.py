@@ -27,7 +27,10 @@ def fixture_project(tmp_path):
     return project
 
 
-def test_real_red_green_execution_precedes_candidate_publication(fixture_project, tmp_path, monkeypatch):
+@pytest.mark.parametrize("decision_status", ["candidate", "no_change"])
+def test_real_red_green_execution_precedes_candidate_publication(
+    fixture_project, tmp_path, monkeypatch, decision_status
+):
     from portfolio_maintenance import pipeline
 
     original_process = pipeline.limited_process
@@ -73,7 +76,7 @@ def test_real_red_green_execution_precedes_candidate_publication(fixture_project
         pipeline,
         "model_json",
         lambda *args: (
-            {"status": "candidate", "summary": "Reject negative truncation budgets"}
+            {"status": decision_status, "summary": "Reject negative truncation budgets"}
             if args[3] == "planning"
             else {"approved": True, "findings": []},
             {"role": "fixture-decision-review-not-live-AI"},
@@ -83,6 +86,14 @@ def test_real_red_green_execution_precedes_candidate_publication(fixture_project
     report = execute(
         tmp_path, fixture_project, tmp_path / "work", tmp_path / "cache", profile, "a" * 40, "2026-10-28", "123"
     )
+    if decision_status == "no_change":
+        assert report["status"] == "no-safe-change"
+        assert not (tmp_path / "work/candidate.json").exists()
+        assert [stage["name"] for stage in report["stages"]] == [
+            "baseline-unit-and-integration",
+            "baseline-integration",
+        ]
+        return
     assert report["status"] == "candidate-verified-awaiting-ci-review"
     stages = {stage["name"]: stage for stage in report["stages"]}
     assert stages["red-regression"]["exit_code"] == 1

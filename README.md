@@ -1,12 +1,30 @@
 # Portfolio Maintenance And Legacy Quality Fixtures
 
-> **Activation status (2026-10-27):** a new evidence-backed noon Europe/Berlin
-> maintenance path is being validated. Daily AI execution is not yet activated.
-> The former three-trigger scheduled fixture replay is now manual-only.
+> **Activation status (2026-10-27):** the evidence-backed maintenance callers are
+> published and active in all seven gallery references, scheduled for **12:00 noon
+> Europe/Berlin**. The first complete real pilot passed 27 tests, four integration
+> cases and 1,000 serial workflows; the model returned **no safe change**, so no PR
+> or improvement was invented. The former three-trigger fixture replay is manual-only.
 > **The fixed counts, pentest descriptions, dialogue and telemetry below are legacy
 > deterministic demonstration fixtures, NOT evidence that those projects were tested,
 > repaired or load-tested by this harness.** Actual maintenance will record source
 > SHAs, executed commands, observed JUnit cases, model provenance and outcomes.
+
+## Actual Maintenance
+
+- [Operating policy, limits, stop/recovery and activation evidence](docs/MAINTENANCE_OPERATIONS.md)
+- [Real TravelBrain pilot40596897772](https://github.com/Sushant-Nemade/TravelBrain/actions/runs/40596897772)
+- [Durable actual report](https://github.com/Sushant-Nemade/TravelBrain/blob/maintenance-reports/latest.json)
+- [Independent real CPU-model runtime40589962908](https://github.com/Sushant-Nemade/autonomous-quality-redteam-harness/actions/runs/40589962908)
+- [Pinned reusable controller](.github/workflows/portfolio-maintenance.yml)
+
+Scheduled execution, tests, proposals, review loops and report publication are
+unattended. **Production merge remains human-reviewed.** The same small open-weight
+model runs in separate author/reviewer contexts; it is not an independent security
+audit. A passing workflow can publish a blocked/no-change report, so inspect its
+actual outcome, not only the green Actions badge.
+
+## Legacy Fixture Demonstration
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11 | 3.12 | 3.13](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
