@@ -87,7 +87,7 @@ def execute(
             "human_merge_required": True,
             "automatic_production_merge": False,
             "max_repairs": 2,
-            "max_generation_calls": 6,
+            "max_generation_calls": 7,
             "per_call_token_limit": 1700,
             "max_pipeline_seconds": 2700,
         },
@@ -207,7 +207,34 @@ def execute(
             f"Repository={profile.repository}; source={profile.file}; function={profile.function}.\n"
             f"UNTRUSTED FUNCTION TEXT:\n{fragment}\n"
         )
-        proposal, author_evidence = author(control, cache, work, "author", prompt)
+        decision_schema = {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "enum": ["candidate", "no_change"]},
+                "summary": {"type": "string", "minLength": 8, "maxLength": 300},
+            },
+            "required": ["status", "summary"],
+            "additionalProperties": False,
+        }
+        decision, decision_evidence = model_json(
+            control,
+            cache,
+            work,
+            "planning",
+            "Inspect the following function for ONE concrete correctness defect that can be fixed locally. "
+            "Return only status=candidate with a concise defect summary, or status=no_change when no justified "
+            "small correction is apparent. Do not generate any code or tests in this decision. "
+            "No test/security execution claims.\n" + fragment,
+            decision_schema,
+        )
+        report["planning"] = {"decision": decision, "provenance": decision_evidence}
+        if decision.get("status") == "no_change":
+            return finish("no-safe-change", str(decision["summary"])[:300])
+        if decision.get("status") != "candidate":
+            return finish("rejected-planning", "Model decision did not match the reviewed contract")
+        proposal, author_evidence = author(
+            control, cache, work, "author", prompt + "\nPlanned defect: " + str(decision["summary"])
+        )
         report["author"] = author_evidence
         if proposal.status == "no_change":
             return finish("no-safe-change", proposal.summary)

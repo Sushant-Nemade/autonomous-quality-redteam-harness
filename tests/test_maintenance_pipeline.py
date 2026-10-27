@@ -72,7 +72,12 @@ def test_real_red_green_execution_precedes_candidate_publication(fixture_project
     monkeypatch.setattr(
         pipeline,
         "model_json",
-        lambda *args: ({"approved": True, "findings": []}, {"role": "fixture-review-not-live-AI"}),
+        lambda *args: (
+            {"status": "candidate", "summary": "Reject negative truncation budgets"}
+            if args[3] == "planning"
+            else {"approved": True, "findings": []},
+            {"role": "fixture-decision-review-not-live-AI"},
+        ),
     )
     profile = profile_for("Sushant-Nemade/TravelBrain")
     report = execute(

@@ -1,4 +1,5 @@
 import argparse
+import base64
 import json
 import os
 import re
@@ -10,11 +11,24 @@ from portfolio_maintenance.policy import local_date, profile_for, registry, run_
 from portfolio_maintenance.publisher import api, publish
 
 
+def globally_paused() -> bool:
+    record = api(
+        "GET", "repos/Sushant-Nemade/autonomous-quality-redteam-harness/contents/maintenance/control.json?ref=main"
+    )
+    if not record or record.get("size", 1001) > 1000:
+        raise ValueError("Global maintenance switch is unavailable; refusing unattended execution")
+    state = json.loads(base64.b64decode(record["content"]))
+    if not isinstance(state, dict) or set(state) != {"paused"} or not isinstance(state["paused"], bool):
+        raise ValueError("Invalid global maintenance switch")
+    return state["paused"]
+
+
 def preflight(pilot: bool) -> dict:
     repository = os.environ["GITHUB_REPOSITORY"]
     profile_for(repository)
     day = local_date()
-    selected = os.environ.get("MAINTENANCE_DISABLED") != "1" and (pilot or selection(day).repository == repository)
+    paused = globally_paused() or os.environ.get("MAINTENANCE_DISABLED") == "1"
+    selected = not paused and (pilot or selection(day).repository == repository)
     output = {
         "selected": str(selected).lower(),
         "date": day.isoformat(),
@@ -72,6 +86,8 @@ def run(args) -> dict:
 
 
 def monitor(control_repository: str) -> dict:
+    if globally_paused():
+        return {"paused": True, "status": "Global owner kill switch enabled; no missed-run alert"}
     day = local_date()
     expected = selection(day)
     key = run_key(expected.repository, day, False, "1")
@@ -82,8 +98,14 @@ def monitor(control_repository: str) -> dict:
         "scheduled_report_present": bool(record),
         "scope": "GitHub-hosted monitor; not an external availability guarantee",
     }
-    if not record:
-        title = f"Maintenance alert: {day.isoformat()} missing scheduled evidence"
+    blocked = False
+    if record:
+        actual = json.loads(base64.b64decode(record["content"]))
+        blocked = str(actual.get("status", "")).startswith(("blocked", "rejected"))
+        outcome["reported_status"] = actual.get("status")
+    if not record or blocked:
+        reason = "blocked or rejected maintenance" if blocked else "missing scheduled evidence"
+        title = f"Maintenance alert: {day.isoformat()} {reason}"
         issues = api("GET", f"repos/{control_repository}/issues?state=open&per_page=100") or []
         if not any(issue["title"] == title for issue in issues):
             api(
@@ -91,7 +113,7 @@ def monitor(control_repository: str) -> dict:
                 f"repos/{control_repository}/issues",
                 {
                     "title": title,
-                    "body": f"The 15:00 Europe/Berlin monitor did not find today's durable report for {expected.repository}. "
+                    "body": f"The 15:00 Europe/Berlin monitor found {reason} for {expected.repository}. "
                     "Check workflow failure, schedule delay/disabling, permission changes and the kill switch. "
                     "Do not interpret missing evidence as a pass. Manual recovery must use the same local-date deduplication policy.",
                 },

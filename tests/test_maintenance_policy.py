@@ -116,3 +116,23 @@ def test_missing_write_endpoint_is_not_reported_as_success(monkeypatch):
         publisher.api(
             "POST", "repos/Sushant-Nemade/TravelBrain/actions/workflows/missing/dispatches", {"ref": "main"}
         )
+
+
+def test_global_kill_switch_cannot_be_bypassed_by_manual_pilot(monkeypatch):
+    from portfolio_maintenance import cli
+
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "Sushant-Nemade/TravelBrain")
+    monkeypatch.setenv("GITHUB_RUN_ID", "123")
+    monkeypatch.setenv("GITHUB_SHA", "a" * 40)
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    monkeypatch.setattr(cli, "globally_paused", lambda: True)
+    assert cli.preflight(True)["selected"] == "false"
+
+
+def test_unavailable_global_switch_fails_closed(monkeypatch):
+    from portfolio_maintenance import cli
+
+    monkeypatch.setattr(cli, "api", lambda *args: None)
+    with pytest.raises(ValueError, match="unavailable"):
+        cli.globally_paused()
