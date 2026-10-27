@@ -203,7 +203,10 @@ def model_json(control: Path, cache: Path, work: Path, role: str, prompt: str, s
     if result["exit_code"] or result["truncated"]:
         raise ValueError("Bounded local model execution failed: " + result["output"][-800:])
     text = result["output"].strip()
-    payload, end = json.JSONDecoder().raw_decode(text)
+    try:
+        payload, end = json.JSONDecoder().raw_decode(text)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"Model did not return JSON; bounded output prefix={text[:600]!r}") from error
     if text[end:].strip() not in {"", "[end of text]", "<|im_end|>"}:
         raise ValueError("Unexpected text outside structured model response")
     evidence = {
