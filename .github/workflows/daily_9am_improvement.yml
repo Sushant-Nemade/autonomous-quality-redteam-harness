@@ -1,0 +1,54 @@
+name: Daily 9AM Autonomous TDD, Pentest & 1,000-User Improvement Loop
+on:
+  schedule:
+    # 07:00 UTC = 09:00 AM CEST (Europe/Berlin summer)
+    - cron: '0 7 * * *'
+    # 08:00 UTC = 09:00 AM CET (Europe/Berlin winter)
+    - cron: '0 8 * * *'
+    # 09:00 UTC = 09:00 AM UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+    inputs:
+      project:
+        description: "Project selector ('daily', 'all', 'flagship', or specific project_id)"
+        required: false
+        default: "daily"
+      users:
+        description: "Number of virtual users to simulate in Stage 5"
+        required: false
+        default: "1000"
+permissions:
+  contents: read
+jobs:
+  daily-5stage-loop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.0'
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Stage 1 & 2 — Run TDD Unit & End-to-End Integration Suite
+        run: uv run --frozen pytest -v
+      - name: Stage 3, 4 & 5 — Run Daily 9AM Rotation (Pentest Agent + Improvement Agent + 1,000 Users)
+        run: |
+          PROJECT_SEL="${{ github.event.inputs.project || 'daily' }}"
+          USERS_CNT="${{ github.event.inputs.users || '1000' }}"
+          TODAY_UTC=$(date -u +%Y-%m-%d)
+          uv run --frozen python -m harness.cli \
+            --project "$PROJECT_SEL" \
+            --users "$USERS_CNT" \
+            --date "$TODAY_UTC" \
+            --output build/daily/daily_improvement_report.json \
+            --summary-md build/daily/DAILY_SUMMARY.md
+          cat build/daily/DAILY_SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify All 7 Portfolio Projects Pass 1,000-User Zero-Error Gate
+        run: uv run --frozen python -m harness.cli --project all --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: daily-9am-improvement-report
+          path: build/daily/*
