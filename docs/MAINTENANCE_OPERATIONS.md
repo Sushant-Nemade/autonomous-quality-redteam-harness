@@ -7,6 +7,10 @@ as active in all seven gallery reference repositories. Each caller is pinned to
 controller revision `dbe13f429cb7867d386d10f499e394a2d1d89948`, including its registry.
 This security maintenance pin includes `uv`0.13.4; the first complete pilot below
 ran the same proposal/model policy before that build-tool-only update.
+The fixed toolchain was subsequently exercised end to end by
+[pilot40602640097](https://github.com/Sushant-Nemade/TravelBrain/actions/runs/40602640097),
+again completing 27 tests, four integration cases, 1,000 serial journeys and real
+inference with a no-safe-change outcome. No PR or improvement was manufactured.
 
 The shared schedule is **12:00 noon Europe/Berlin**, not midnight or 09:00.
 An epoch-based round robin selects one project per Berlin calendar day:
