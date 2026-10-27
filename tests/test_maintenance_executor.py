@@ -40,6 +40,14 @@ def test_runtime_flags_are_not_editable_by_generated_project_code():
     assert "llama-completion" in dockerfile
 
 
+def test_dependency_locations_survive_the_readonly_source_mount():
+    root = Path(__file__).resolve().parents[1]
+    dockerfile = (root / "maintenance/Project.Dockerfile").read_text()
+    assert "UV_PROJECT_ENVIRONMENT=/opt/venv" in dockerfile
+    assert "mv frontend/node_modules /node_modules" in dockerfile
+    assert "mv node_modules /node_modules" in dockerfile
+
+
 def test_completion_preserves_generated_token_output_while_suppressing_metadata(tmp_path, monkeypatch):
     calls = []
 

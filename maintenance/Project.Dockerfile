@@ -11,7 +11,7 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ARG EXTRA_DEV=0
 RUN if [ "$EXTRA_DEV" = "1" ]; then uv sync --frozen --extra dev; else uv sync --frozen; fi
 RUN uv pip install --python /opt/venv/bin/python --no-deps pytest-repeat==0.9.4
-RUN if [ -f frontend/package-lock.json ]; then npm --prefix frontend ci --ignore-scripts; elif [ -f package-lock.json ]; then npm ci --ignore-scripts; fi
+RUN if [ -f frontend/package-lock.json ]; then npm --prefix frontend ci --ignore-scripts && mv frontend/node_modules /node_modules; elif [ -f package-lock.json ]; then npm ci --ignore-scripts && mv node_modules /node_modules; fi
 ENV PATH=/opt/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/work/src:/work HOME=/tmp OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
 USER 10001:10001
 ENTRYPOINT ["/opt/venv/bin/python"]
