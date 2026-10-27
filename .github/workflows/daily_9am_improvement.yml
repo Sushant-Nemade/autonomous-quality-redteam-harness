@@ -22,7 +22,7 @@ jobs:
           python-version: '3.13'
       - uses: astral-sh/setup-uv@v6
         with:
-          version: '0.13.0'
+          version: '0.13.4'
       - name: Install locked dependencies
         run: uv sync --frozen
       - name: Stage 1 & 2 — Run TDD Unit & End-to-End Integration Suite
