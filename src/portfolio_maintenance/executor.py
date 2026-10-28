@@ -98,6 +98,8 @@ def file_digest(path: Path) -> str:
 
 def prepare_model(control: Path, cache: Path) -> None:
     cache.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(control / "maintenance/third-party/Qwen-LICENSE.txt", cache / "Qwen-LICENSE.txt")
+    shutil.copyfile(control / "maintenance/third-party/README.md", cache / "Qwen-model-NOTICE.md")
     model = cache / MODEL_FILE
     downloaded(
         f"https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/{MODEL_REVISION}/{MODEL_FILE}",
