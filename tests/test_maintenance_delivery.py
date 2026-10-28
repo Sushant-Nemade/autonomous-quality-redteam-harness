@@ -254,3 +254,197 @@ def test_only_matching_owned_bot_run_receives_execution_approval(proof, monkeypa
     with pytest.raises(ValueError):
         delivery.approve_owned_candidate_ci(repository, pull_request)
     assert len(calls) == before
+
+
+@pytest.mark.parametrize("main_sha", ["c" * 40, "d" * 40])
+def test_reconciliation_explicitly_dispatches_pages_only_after_main_ci(proof, monkeypatch, main_sha):
+    from portfolio_maintenance import cli, delivery
+
+    repository, pull_request, run, jobs = deepcopy(proof)
+    pull_request.update(number=1, merged=True, merge_commit_sha="c" * 40)
+    run.update(id=456, head_sha=main_sha, head_branch="main")
+    report = {
+        "repository": repository,
+        "source_sha": "a" * 40,
+        "candidate_sha": "b" * 40,
+        "candidate_branch": pull_request["head"]["ref"],
+        "pull_request_number": 1,
+        "run_id": "123",
+        "policy": {"automatic_production_merge": True},
+    }
+    calls = []
+
+    def fake_api(method, path, payload=None):
+        calls.append((method, path, payload))
+        if "/contents/latest.json" in path:
+            return {"content": base64.b64encode(json.dumps(report).encode()).decode()}
+        if path.endswith("/pulls/1"):
+            return pull_request
+        if path.endswith("/git/ref/heads/main"):
+            return {"object": {"sha": main_sha}}
+        if "/compare/" in path:
+            return {"status": "ahead", "merge_base_commit": {"sha": "c" * 40}}
+        if "/workflows/verify.yml/runs?" in path:
+            return {"workflow_runs": [run]}
+        if "/workflows/pages.yml/runs?" in path:
+            return {"workflow_runs": []}
+        if path.endswith("/actions/runs/456"):
+            return run
+        if "/jobs?" in path:
+            return {"jobs": jobs}
+        if path.endswith("/pages.yml/dispatches"):
+            assert payload == {"ref": "main", "inputs": {"verified_ci_run_id": "456"}}
+            return {}
+        raise AssertionError((method, path, payload))
+
+    monkeypatch.setenv("MAINTENANCE_AUTO_MERGE", "1")
+    monkeypatch.delenv("MAINTENANCE_DISABLED", raising=False)
+    monkeypatch.setattr(cli, "globally_paused", lambda: False)
+    monkeypatch.setattr(delivery, "api", fake_api)
+    monkeypatch.setattr(delivery, "persist_delivery", lambda *args: None)
+    result = delivery.reconcile(repository)
+    assert result["status"] == "merged-awaiting-pages-deployment"
+    assert result["main_ci_run_id"] == "456"
+    assert result["verified_sha"] == main_sha
+    assert sum(method == "POST" and path.endswith("/pages.yml/dispatches") for method, path, _ in calls) == 1
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("head_sha", "d" * 40),
+        ("head_branch", "maintenance/maintenance-2026-10-28"),
+        ("head_repository", {"full_name": "other-owner/TravelBrain"}),
+        ("event", "pull_request"),
+        ("path", ".github/workflows/other.yml"),
+        ("conclusion", "failure"),
+        ("status", "in_progress"),
+    ],
+)
+def test_deployment_proof_rejects_stale_untrusted_or_failed_ci(proof, monkeypatch, field, value):
+    from portfolio_maintenance import delivery
+
+    repository, _, run, _ = deepcopy(proof)
+    run.update(head_branch="main", head_sha="c" * 40)
+    run[field] = value
+
+    def fake_api(method, path, payload=None):
+        assert method == "GET"
+        return {"object": {"sha": "c" * 40}} if path.endswith("/main") else run
+
+    monkeypatch.setattr(delivery, "api", fake_api)
+    with pytest.raises(ValueError, match="exact current main"):
+        delivery.verify_deployment(repository, "456")
+
+
+@pytest.mark.parametrize("mode", ["missing", "duplicated", "skipped"])
+def test_deployment_requires_the_complete_successful_job_set(proof, monkeypatch, mode):
+    from portfolio_maintenance import delivery
+
+    repository, _, run, jobs = deepcopy(proof)
+    run.update(head_branch="main", head_sha="c" * 40)
+    altered = jobs[:-1] if mode == "missing" else [*jobs, jobs[0]] if mode == "duplicated" else [
+        {**job, "conclusion": "skipped"} for job in jobs
+    ]
+
+    def fake_api(method, path, payload=None):
+        assert method == "GET"
+        if path.endswith("/main"):
+            return {"object": {"sha": "c" * 40}}
+        return {"jobs": altered} if "/jobs?" in path else run
+
+    monkeypatch.setattr(delivery, "api", fake_api)
+    with pytest.raises(ValueError):
+        delivery.verify_deployment(repository, "456")
+
+
+@pytest.mark.parametrize(
+    "outcome,attempt,expected,posts",
+    [
+        ("success", 1, "deployed", 0),
+        ("skipped", 1, "blocked-proof", 0),
+        ("in_progress", 1, "merged-awaiting-pages-deployment", 0),
+        ("failure", 1, "merged-awaiting-pages-deployment", 1),
+        ("failure", 2, "blocked-pages-deployment", 0),
+        ("missing", 2, "blocked-pages-dispatch", 0),
+    ],
+)
+def test_pages_recovery_is_bounded_and_skipped_deployments_are_not_success(
+    proof, monkeypatch, outcome, attempt, expected, posts
+):
+    from portfolio_maintenance import delivery
+
+    repository, _, run, _ = deepcopy(proof)
+    run.update(
+        id=789, path=".github/workflows/pages.yml", head_sha="c" * 40, head_branch="main",
+        conclusion="failure" if outcome == "failure" else "success", run_attempt=attempt,
+        status="in_progress" if outcome == "in_progress" else "completed",
+    )
+    report = {"pages_dispatch_attempts": attempt}
+    calls = []
+
+    def fake_api(method, path, payload=None):
+        calls.append((method, path))
+        if method == "POST":
+            assert path.endswith("/789/rerun")
+            return {}
+        if "/jobs?" in path:
+            return {"jobs": [{"name": "deploy", "status": "completed", "conclusion": outcome}]}
+        return {"workflow_runs": [] if outcome == "missing" else [run]}
+
+    monkeypatch.setattr(delivery, "api", fake_api)
+    monkeypatch.setattr(delivery, "verify_deployment", lambda *args: {
+        "verified_sha": "c" * 40, "main_ci_run_id": "456",
+    })
+    if outcome == "skipped":
+        with pytest.raises(ValueError, match="skipped"):
+            delivery.promote_verified_main(repository, "456", report)
+    else:
+        delivery.promote_verified_main(repository, "456", report)
+        assert report["status"] == expected
+    assert sum(method == "POST" for method, _ in calls) == posts
+
+
+def test_unrelated_newer_main_is_preserved_without_deployment(proof, monkeypatch):
+    from portfolio_maintenance import cli, delivery
+
+    repository, pull_request, _, _ = deepcopy(proof)
+    pull_request.update(number=1, merged=True, merge_commit_sha="c" * 40)
+    report = {
+        "policy": {"automatic_production_merge": True}, "pull_request_number": 1,
+        "candidate_sha": "b" * 40, "candidate_branch": pull_request["head"]["ref"],
+    }
+
+    def fake_api(method, path, payload=None):
+        assert method == "GET"
+        if "/contents/" in path:
+            return {"content": base64.b64encode(json.dumps(report).encode()).decode()}
+        if "/pulls/" in path:
+            return pull_request
+        if "/compare/" in path:
+            return {"status": "diverged", "merge_base_commit": {"sha": "a" * 40}}
+        assert path.endswith("/main")
+        return {"object": {"sha": "d" * 40}}
+
+    monkeypatch.setenv("MAINTENANCE_AUTO_MERGE", "1")
+    monkeypatch.delenv("MAINTENANCE_DISABLED", raising=False)
+    monkeypatch.setattr(cli, "globally_paused", lambda: False)
+    monkeypatch.setattr(delivery, "api", fake_api)
+    assert delivery.reconcile(repository)["status"] == "newer-main-revision-preserved"
+
+
+def test_proof_cli_outputs_only_the_attested_sha(monkeypatch, tmp_path, capsys):
+    from portfolio_maintenance import cli, delivery
+
+    destination = tmp_path / "github-output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(destination))
+    monkeypatch.setattr("sys.argv", [
+        "portfolio-maintenance", "verify-deployment", "--repository", "Sushant-Nemade/TravelBrain",
+        "--run-id", "456",
+    ])
+    monkeypatch.setattr(delivery, "verify_deployment", lambda *args: {
+        "verified_sha": "c" * 40, "main_ci_run_id": "456",
+    })
+    cli.main()
+    assert destination.read_text() == "verified_sha=" + "c" * 40 + "\n"
+    assert json.loads(capsys.readouterr().out)["main_ci_run_id"] == "456"

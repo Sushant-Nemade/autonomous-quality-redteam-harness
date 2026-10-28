@@ -144,6 +144,9 @@ def main() -> None:
     delivering = subcommands.add_parser("deliver")
     delivering.add_argument("--repository", required=True)
     delivering.add_argument("--run-id")
+    deploying = subcommands.add_parser("verify-deployment")
+    deploying.add_argument("--repository", required=True)
+    deploying.add_argument("--run-id", required=True)
     subcommands.add_parser("registry")
     args = parser.parse_args()
     if args.command == "preflight":
@@ -160,6 +163,13 @@ def main() -> None:
         result = finalize(args.repository, args.run_id) if args.run_id else reconcile(args.repository)
         if args.run_id and str(result.get("status", "")).startswith("not-"):
             result = reconcile(args.repository)
+    elif args.command == "verify-deployment":
+        from portfolio_maintenance.delivery import verify_deployment
+
+        result = verify_deployment(args.repository, args.run_id)
+        if os.environ.get("GITHUB_OUTPUT"):
+            with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+                handle.write(f"verified_sha={result['verified_sha']}\n")
     else:
         result = [profile.model_dump() for profile in registry()]
     print(json.dumps(result, indent=2, allow_nan=False))

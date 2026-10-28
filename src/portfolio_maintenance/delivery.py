@@ -45,6 +45,14 @@ def content(repository: str, path: str, ref: str) -> str:
     return base64.b64decode(record["content"]).decode("utf-8")
 
 
+def assert_required_ci_jobs(repository: str, jobs: list[dict]) -> None:
+    required = set(REQUIRED_CHECKS[repository.split("/")[1]])
+    if len(jobs) != len(required) or {job.get("name") for job in jobs} != required:
+        raise ValueError("Required CI job set is missing, duplicated or changed")
+    if any(job.get("status") != "completed" or job.get("conclusion") != "success" for job in jobs):
+        raise ValueError("Every required independent CI job must succeed")
+
+
 def assert_ci_proof(repository: str, pull_request: dict, run: dict, jobs: list[dict]) -> None:
     profile = profile_for(repository)
     if (
@@ -68,11 +76,7 @@ def assert_ci_proof(repository: str, pull_request: dict, run: dict, jobs: list[d
         or run.get("head_repository", {}).get("full_name") != repository
     ):
         raise ValueError("Independent CI does not attest this exact owned candidate SHA")
-    required = set(REQUIRED_CHECKS[repository.split("/")[1]])
-    if len(jobs) != len(required) or {job.get("name") for job in jobs} != required:
-        raise ValueError("Required CI job set is missing, duplicated or changed")
-    if any(job.get("status") != "completed" or job.get("conclusion") != "success" for job in jobs):
-        raise ValueError("Every required independent CI job must succeed")
+    assert_required_ci_jobs(repository, jobs)
 
 
 def approve_owned_candidate_ci(repository: str, pull_request: dict) -> list[int]:
@@ -103,6 +107,98 @@ def approve_owned_candidate_ci(repository: str, pull_request: dict) -> list[int]
             api("POST", f"repos/{repository}/actions/runs/{run['id']}/approve", {})
             approved.append(run["id"])
     return approved
+
+
+def verify_deployment(repository: str, run_id: str) -> dict:
+    profile = profile_for(repository)
+    if not re.fullmatch(r"[1-9][0-9]{0,20}", run_id):
+        raise ValueError("Invalid deployment CI run identifier")
+    run = api("GET", f"repos/{repository}/actions/runs/{run_id}")
+    current = api("GET", f"repos/{repository}/git/ref/heads/main")["object"]["sha"]
+    if (
+        not run
+        or not re.fullmatch(r"[a-f0-9]{40}", current)
+        or run.get("status") != "completed"
+        or run.get("conclusion") != "success"
+        or run.get("event") not in {"push", "workflow_dispatch"}
+        or run.get("path") != ".github/workflows/" + profile.ci
+        or run.get("head_branch") != "main"
+        or run.get("head_sha") != current
+        or run.get("head_repository", {}).get("full_name") != repository
+    ):
+        raise ValueError("Deployment requires successful owned CI for the exact current main SHA")
+    jobs = api("GET", f"repos/{repository}/actions/runs/{run_id}/jobs?filter=latest&per_page=100")["jobs"]
+    assert_required_ci_jobs(repository, jobs)
+    return {"verified_sha": current, "main_ci_run_id": run_id}
+
+
+def promote_verified_main(repository: str, run_id: str, report: dict) -> None:
+    report.update(verify_deployment(repository, run_id))
+    if repository == "Sushant-Nemade/Doclify":
+        report.update(
+            status="merged-main-ci-verified",
+            detail="CLI project merged and independently verified; no web deployment applies",
+        )
+        return
+    runs = api(
+        "GET", f"repos/{repository}/actions/workflows/pages.yml/runs?branch=main&per_page=20"
+    )["workflow_runs"]
+    matching = [
+        run
+        for run in runs
+        if run.get("head_sha") == report["verified_sha"]
+        and run.get("head_branch") == "main"
+        and run.get("path") == ".github/workflows/pages.yml"
+        and run.get("event") in {"workflow_run", "workflow_dispatch"}
+        and run.get("head_repository", {}).get("full_name") == repository
+    ]
+    report.update(
+        status="merged-awaiting-pages-deployment",
+        detail="Main CI verified; exact-SHA Pages deployment is pending",
+    )
+    if not matching:
+        attempts = report.get("pages_dispatch_attempts", 0)
+        if attempts >= 2:
+            report.update(
+                status="blocked-pages-dispatch", detail="Bounded Pages dispatch limit exhausted; no deployment bypass"
+            )
+            return
+        report["pages_dispatch_attempts"] = attempts + 1
+        try:
+            api(
+                "POST",
+                f"repos/{repository}/actions/workflows/pages.yml/dispatches",
+                {"ref": "main", "inputs": {"verified_ci_run_id": run_id}},
+            )
+        except RuntimeError as error:
+            report["detail"] = "Scheduled reconciliation will retry the bounded Pages dispatch: " + str(error)[:1000]
+        return
+    latest = matching[0]
+    report["pages_run_id"] = str(latest["id"])
+    if latest.get("status") != "completed":
+        return
+    if latest.get("conclusion") == "success":
+        jobs = api(
+            "GET", f"repos/{repository}/actions/runs/{latest['id']}/jobs?filter=latest&per_page=100"
+        )["jobs"]
+        deployed = [job for job in jobs if job.get("name") == "deploy"]
+        if (
+            len(deployed) != 1
+            or deployed[0].get("conclusion") != "success"
+            or deployed[0].get("status") != "completed"
+        ):
+            raise ValueError("A successful deployment job, not a skipped workflow, is required")
+        report.update(
+            status="deployed",
+            detail="Protected automatic merge, complete current-main CI and exact-SHA Pages deployment all succeeded",
+        )
+    elif latest.get("run_attempt", 1) == 1:
+        api("POST", f"repos/{repository}/actions/runs/{latest['id']}/rerun", {})
+        report["detail"] = "One bounded Pages retry requested; the exact-main CI guard remains mandatory"
+    else:
+        report.update(
+            status="blocked-pages-deployment", detail="Pages failed after one retry; no verification bypass"
+        )
 
 
 def persist_delivery(repository: str, key: str, report: dict) -> None:
@@ -303,13 +399,22 @@ def reconcile(repository: str) -> dict:
         raise ValueError("Invalid reconciliation evidence key")
     if pull_request.get("merged"):
         merged_sha = pull_request["merge_commit_sha"]
-        if api("GET", f"repos/{repository}/git/ref/heads/main")["object"]["sha"] != merged_sha:
-            return {"status": "newer-main-revision-preserved"}
+        current_sha = api("GET", f"repos/{repository}/git/ref/heads/main")["object"]["sha"]
+        if current_sha != merged_sha:
+            comparison = api("GET", f"repos/{repository}/compare/{merged_sha}...{current_sha}")
+            if not comparison or comparison.get("status") != "ahead" or comparison.get(
+                "merge_base_commit", {}
+            ).get("sha") != merged_sha:
+                return {"status": "newer-main-revision-preserved"}
+            report["descendant_main_sha"] = current_sha
         runs = api(
             "GET",
-            f"repos/{repository}/actions/workflows/{profile.ci}/runs?branch=main&event=workflow_dispatch&per_page=20",
+            f"repos/{repository}/actions/workflows/{profile.ci}/runs?branch=main&per_page=20",
         )["workflow_runs"]
-        matching = [run for run in runs if run["head_sha"] == merged_sha]
+        matching = [
+            run for run in runs
+            if run["head_sha"] == current_sha and run.get("event") in {"push", "workflow_dispatch"}
+        ]
         report["merged_sha"] = merged_sha
         if not matching:
             attempts = report.get("main_dispatch_attempts", 0)
@@ -324,10 +429,10 @@ def reconcile(repository: str) -> dict:
         elif matching[0]["status"] != "completed":
             return {"status": "main-verification-still-running"}
         elif matching[0]["conclusion"] == "success":
-            report.update(
-                status="merged-main-ci-verified",
-                detail="Automatic merge and independent main verification passed; deployment workflow may proceed",
-            )
+            try:
+                promote_verified_main(repository, str(matching[0]["id"]), report)
+            except ValueError as error:
+                report.update(status="blocked-deployment-proof", detail=str(error)[:1000])
         elif matching[0].get("run_attempt", 1) == 1:
             api("POST", f"repos/{repository}/actions/runs/{matching[0]['id']}/rerun-failed-jobs", {})
             report.update(
