@@ -15,6 +15,10 @@ from portfolio_maintenance.policy import (
     MODEL_FILE,
     MODEL_REVISION,
     MODEL_SHA256,
+    REVIEWER_BYTES,
+    REVIEWER_FILE,
+    REVIEWER_REVISION,
+    REVIEWER_SHA256,
     Proposal,
 )
 
@@ -56,7 +60,9 @@ def limited_process(command: list[str], *, cwd: Path, timeout: int = 600) -> dic
     }
 
 
-def downloaded(url: str, destination: Path, maximum: int, expected_sha: str | None = None) -> None:
+def downloaded(
+    url: str, destination: Path, maximum: int, expected_sha: str | None = None, expected_size: int | None = None
+) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
         if expected_sha and file_digest(destination) == expected_sha:
@@ -73,7 +79,9 @@ def downloaded(url: str, destination: Path, maximum: int, expected_sha: str | No
                     raise ValueError("Pinned download exceeds its size budget")
                 checksum.update(chunk)
                 handle.write(chunk)
-        if expected_sha and (checksum.hexdigest() != expected_sha or length != MODEL_BYTES):
+        if (expected_sha and checksum.hexdigest() != expected_sha) or (
+            expected_size is not None and length != expected_size
+        ):
             raise ValueError("Pinned model checksum/size mismatch")
         temporary.replace(destination)
     finally:
@@ -96,6 +104,7 @@ def prepare_model(control: Path, cache: Path) -> None:
         model,
         MODEL_BYTES,
         MODEL_SHA256,
+        expected_size=MODEL_BYTES,
     )
     context = cache / "runtime"
     source = context / "llama"
@@ -127,7 +136,9 @@ def docker_command(image: str, mounts: dict[str, tuple[Path, bool]], name: str, 
         "--security-opt=no-new-privileges",
         "--pids-limit=128",
         "--cpus=2",
-        "--memory=4g",
+        "--memory=8g"
+        if image == "portfolio-maintenance-model" and any(REVIEWER_FILE in item for item in args)
+        else "--memory=4g",
         "--log-driver=none",
         "--tmpfs",
         "/tmp:rw,noexec,nosuid,size=536870912",
@@ -161,6 +172,19 @@ def isolated(image: str, mounts: dict, args: list[str], control: Path, timeout: 
 def model_json(control: Path, cache: Path, work: Path, role: str, prompt: str, schema: dict) -> tuple[dict, dict]:
     if len(prompt) > 16000:
         raise ValueError("Prompt exceeds the reviewed context budget")
+    reviewing = role.startswith("security-review-")
+    filename = REVIEWER_FILE if reviewing else MODEL_FILE
+    revision = REVIEWER_REVISION if reviewing else MODEL_REVISION
+    checksum = REVIEWER_SHA256 if reviewing else MODEL_SHA256
+    repository = "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF" if reviewing else "Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF"
+    if reviewing:
+        downloaded(
+            f"https://huggingface.co/{repository}/resolve/{revision}/{filename}",
+            cache / filename,
+            REVIEWER_BYTES,
+            checksum,
+            expected_size=REVIEWER_BYTES,
+        )
     folder = work / (role + "-" + uuid4().hex[:8])
     folder.mkdir(parents=True)
     message = (
@@ -175,7 +199,7 @@ def model_json(control: Path, cache: Path, work: Path, role: str, prompt: str, s
         {"/input": (folder, True), "/models": (cache, True)},
         [
             "-m",
-            "/models/" + MODEL_FILE,
+            "/models/" + filename,
             "-f",
             "/input/prompt.txt",
             "--json-schema-file",
@@ -214,8 +238,9 @@ def model_json(control: Path, cache: Path, work: Path, role: str, prompt: str, s
         "role": role,
         "engine": "llama.cpp CPU, no-network container",
         "max_output_tokens": 1700,
-        "model_revision": MODEL_REVISION,
-        "model_sha256": MODEL_SHA256,
+        "model_repository": repository,
+        "model_revision": revision,
+        "model_sha256": checksum,
         "response_sha256": hashlib.sha256(text.encode()).hexdigest(),
         "response_bytes": len(text.encode()),
     }

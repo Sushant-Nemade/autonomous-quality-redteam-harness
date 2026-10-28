@@ -93,3 +93,31 @@ def test_executed_red_cannot_be_reclassified_as_no_change_or_rewrite_its_test(tm
     assert observed[0]["properties"]["status"]["const"] == "candidate"
     assert observed[0]["properties"]["old"]["const"] == "return value"
     assert observed[0]["properties"]["test"]["const"] == "assert True"
+
+
+def test_separate_pinned_reviewer_has_explicit_resource_budget(tmp_path, monkeypatch):
+    from portfolio_maintenance import executor
+    from portfolio_maintenance.policy import REVIEWER_BYTES, REVIEWER_FILE, REVIEWER_SHA256
+
+    downloads, invocations = [], []
+
+    def fake_download(*args, **kwargs):
+        downloads.append((args, kwargs))
+
+    def fake_inference(image, mounts, args, control, timeout):
+        invocations.append(args)
+        return {"exit_code": 0, "truncated": False, "output": '{"approved":true,"findings":[]}'}
+
+    monkeypatch.setattr(executor, "downloaded", fake_download)
+    monkeypatch.setattr(executor, "isolated", fake_inference)
+    payload, evidence = executor.model_json(
+        tmp_path, tmp_path, tmp_path, "security-review-0", "Review current candidate", {"type": "object"}
+    )
+    assert payload["approved"]
+    assert evidence["model_sha256"] == REVIEWER_SHA256
+    assert invocations[0][1].endswith(REVIEWER_FILE)
+    assert downloads[0][0][2] == REVIEWER_BYTES
+    assert downloads[0][1]["expected_size"] == REVIEWER_BYTES
+    command = executor.docker_command("portfolio-maintenance-model", {}, "review", invocations[0])
+    assert "--memory=8g" in command
+    assert "--network=none" in command and "--cap-drop=ALL" in command
