@@ -157,6 +157,15 @@ def finalize(repository: str, run_id: str) -> dict:
     ):
         raise ValueError("Candidate did not originate from a successful trusted maintenance workflow")
     try:
+        if run.get("conclusion") != "success" and run.get("run_attempt", 1) == 1:
+            api("POST", f"repos/{repository}/actions/runs/{run_id}/rerun", {})
+            report.update(
+                status="independent-ci-retry-running",
+                independent_ci_run=run_id,
+                detail="One full independent CI retry requested; every required check remains mandatory",
+            )
+            persist_delivery(repository, key, report)
+            return report
         jobs = api("GET", f"repos/{repository}/actions/runs/{run_id}/jobs?filter=latest&per_page=100")["jobs"]
         assert_ci_proof(repository, pull_request, run, jobs)
         if api("GET", f"repos/{repository}/git/ref/heads/main")["object"]["sha"] != report["source_sha"]:

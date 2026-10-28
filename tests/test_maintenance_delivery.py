@@ -71,11 +71,13 @@ def test_fork_and_nonbot_prs_cannot_gain_automatic_delivery(proof):
         assert_ci_proof(repository, pull_request, run, jobs)
 
 
-def test_complete_trusted_delivery_merges_exact_sha_and_dispatches_main(proof, monkeypatch):
+@pytest.mark.parametrize("conclusion,attempt", [("success", 1), ("failure", 1), ("failure", 2)])
+def test_complete_trusted_delivery_merges_exact_sha_and_dispatches_main(proof, monkeypatch, conclusion, attempt):
     from portfolio_maintenance import cli, delivery
 
     repository, pull_request, run, jobs = deepcopy(proof)
     pull_request.update(number=1)
+    run.update(conclusion=conclusion, run_attempt=attempt)
     original = "def truncate(value, limit):\n    return str(value)[:limit]\n"
     changed = "def truncate(value, limit):\n    if limit < 0:\n        raise ValueError('negative budget')\n    return str(value)[:limit]\n"
     regression = "import pytest\nfrom src.utils.async_utils import truncate\n\ndef test_negative():\n    with pytest.raises(ValueError):\n        truncate('hello', -1)\n"
@@ -116,6 +118,8 @@ def test_complete_trusted_delivery_merges_exact_sha_and_dispatches_main(proof, m
 
     def fake_api(method, path, payload=None):
         calls.append((method, path, payload))
+        if path.endswith("/rerun") or path.endswith("/comments"):
+            return {}
         if path.endswith("/actions/runs/456"):
             return run
         if path.endswith("/actions/runs/123"):
@@ -157,6 +161,13 @@ def test_complete_trusted_delivery_merges_exact_sha_and_dispatches_main(proof, m
     monkeypatch.setattr(delivery, "api", fake_api)
     monkeypatch.setattr(delivery, "persist_delivery", lambda *args: None)
     result = delivery.finalize(repository, "456")
+    if conclusion == "failure":
+        assert result["status"] == (
+            "independent-ci-retry-running" if attempt == 1 else "rejected-automatic-delivery"
+        )
+        assert not any(method == "PUT" and path.endswith("/merge") for method, path, _ in calls)
+        assert any(path.endswith("/rerun") for _, path, _ in calls) is (attempt == 1)
+        return
     assert result["merged_sha"] == "c" * 40
     assert result["main_verification_dispatched"]
     assert any(method == "PUT" and path.endswith("/merge") for method, path, _ in calls)
