@@ -448,3 +448,21 @@ def test_proof_cli_outputs_only_the_attested_sha(monkeypatch, tmp_path, capsys):
     cli.main()
     assert destination.read_text() == "verified_sha=" + "c" * 40 + "\n"
     assert json.loads(capsys.readouterr().out)["main_ci_run_id"] == "456"
+
+
+def test_canonical_comparison_api_path_is_allowed_without_allowing_traversal(monkeypatch):
+    from io import BytesIO
+
+    from portfolio_maintenance import publisher
+
+    monkeypatch.setenv("GH_TOKEN", "fixture-not-a-credential")
+    monkeypatch.setattr(publisher, "urlopen", lambda *args, **kwargs: BytesIO(b'{"status":"ahead"}'))
+    path = "repos/Sushant-Nemade/TravelBrain/compare/" + "c" * 40 + "..." + "d" * 40
+    assert publisher.api("GET", path) == {"status": "ahead"}
+    for rejected in [
+        "repos/Sushant-Nemade/../compare/" + "c" * 40 + "..." + "d" * 40,
+        "repos/Sushant-Nemade/TravelBrain/contents/../secrets",
+        "repos/other-owner/TravelBrain/compare/" + "c" * 40 + "..." + "d" * 40,
+    ]:
+        with pytest.raises(ValueError, match="Out-of-owner"):
+            publisher.api("GET", rejected)

@@ -13,7 +13,10 @@ def api(method: str, path: str, payload: dict | None = None):
     token = os.environ.get("GH_TOKEN", "")
     if not token:
         raise ValueError("Trusted publisher requires a repository-scoped GitHub token")
-    if not path.startswith("repos/Sushant-Nemade/") or ".." in path:
+    comparison = re.fullmatch(
+        r"repos/Sushant-Nemade/[A-Za-z0-9_-]+/compare/[a-f0-9]{40}\.\.\.[a-f0-9]{40}", path
+    )
+    if not path.startswith("repos/Sushant-Nemade/") or (".." in path and not comparison):
         raise ValueError("Out-of-owner publication is forbidden")
     request = Request(
         "https://api.github.com/" + path,
