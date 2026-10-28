@@ -2,12 +2,14 @@
 
 ## Actual Activation
 
-As of 2026-10-27, `daily-maintenance.yml` is published and GitHub reports its state
-as active in all seven gallery reference repositories. Six callers are pinned to
-controller revision `321a857ef17570906f01bf61164d0b8e59147ecc`; TravelBrain uses
-`5fc31e5684790f0bc7d7ba1417c1c2f2353d0880` for the demonstrated-RED typed repair
-contract and separately pinned larger offline reviewer. Both pins retain the same registry, schedule, isolation and protected
-automatic-delivery guard. Configuration updates used ordinary protected PRs.
+As of 2026-10-28, `daily-maintenance.yml` is published and GitHub reports its state
+as active in all seven gallery reference repositories. The completed deployment
+rollout pins maintenance, delivery and web deployment proof to controller revision
+`e205849fa00bfcafb83b1bc645ae26e9ca378b47`. Configuration updates use ordinary
+protected PRs, never direct main pushes or administrator bypass.
+The controller's [cross-platform CI40660929643](https://github.com/Sushant-Nemade/autonomous-quality-redteam-harness/actions/runs/40660929643)
+passed 69 tests on Linux Python3.12/3.13 and Windows Python3.13, plus lint, the
+existing type gate, dependency audits, packaging and container checks.
 This security maintenance pin includes `uv`0.13.4; the first complete pilot below
 ran the same proposal/model policy before that build-tool-only update.
 The fixed toolchain was subsequently exercised end to end by
@@ -58,19 +60,60 @@ after every required check, without temporarily disabling protection or admin by
 
 The merged main SHA receives a separately dispatched full CI run. Six web apps
 deploy only successful current-main owner CI results from push or workflow dispatch.
+Each Pages workflow also accepts a `verified_ci_run_id` dispatch. A separate
+read-only pinned proof job checks the owned CI workflow, event, exact current main
+SHA and every required job; missing, duplicated, skipped or failed jobs reject it.
+The build checks out only that attested SHA and rechecks main immediately before
+deployment. A newer main can be reconciled only after proving it descends from
+the original merge, then independently verifying its own complete CI.
 Doclify automatically builds verified wheel/source artifacts; no PyPI publishing
 identity is configured and no PyPI publication is claimed.
 
 Every project also reconciles delivery state at `17 */6 * * *` Europe/Berlin;
 this is housekeeping, not a second daily improvement selection. It catches missed
 CI events, retries missing post-merge dispatch at most twice and failed main CI
-once. Failed verification does not bypass deployment. Global/per-project stop
+once. It explicitly dispatches Pages when completion callbacks are suppressed,
+with at most two dispatch attempts and one retry of a failed deployment. A green
+workflow with a skipped deployment job is not recorded as deployed. Failed
+verification does not bypass deployment. Global/per-project stop
 controls still apply. Infrastructure, permissions or safety failures can stop a
 run; this is not a promise that every possible failure can repair itself.
 
 Earlier no-change pilots below prove actual execution, not automatic merging.
-The concrete negative-truncation-budget live pilot is separately recorded when it
-finishes; only its actual observed result may be described as a delivered change.
+The following later pilot demonstrates a real generated change and protected merge.
+
+## Executed Automatic Merge Proof
+
+- [Live pilot40621360289](https://github.com/Sushant-Nemade/TravelBrain/actions/runs/40621360289)
+  generated the negative-truncation-budget repair from source
+  `985474bece390577b049a0cbe28d1a1829b76de5`. Baseline 27/27 tests and 4/4 integration
+  cases passed. The immutable regression demonstrated RED: one failure and one pass,
+  followed by GREEN 2/2. Final 29/29 tests and 4/4 integration cases passed.
+- Both before-change and after-change workloads ran 1,000 serial journeys with zero
+  failures. These are local regression journeys, not 1,000 concurrent external users.
+  The separately pinned 7B model reviewer approved the candidate without findings.
+- [Bot PR5](https://github.com/Sushant-Nemade/TravelBrain/pull/5) contained exact candidate
+  `870d2fc00f610678f20845568960f3336262173a`.
+  [Independent candidate CI40622204667](https://github.com/Sushant-Nemade/TravelBrain/actions/runs/40622204667)
+  passed every required Linux, Windows and container job.
+- [Trusted reconciliation40623354813](https://github.com/Sushant-Nemade/TravelBrain/actions/runs/40623354813)
+  automatically performed the protected merge at2026-10-28T02:51:42Z, producing
+  `c79ed99baa98235fa0717b803a1c32feb93228cc`. No routine owner merge approval was used.
+- [Automatically dispatched main CI40623391622](https://github.com/Sushant-Nemade/TravelBrain/actions/runs/40623391622)
+  passed in full. Its suppressed Pages callback exposed the explicit-promotion
+  gap fixed by the current controller; successful main CI alone was not called a deployment.
+- The [durable delivery report](https://github.com/Sushant-Nemade/TravelBrain/blob/maintenance-reports/runs/maintenance-2026-10-28-pilot-40621360289.json)
+  retains `merged_sha`, separately attested `verified_sha`, `main_ci_run_id` and
+  `pages_run_id`. A later protected workflow-only rollout changes the current main
+  SHA without rewriting the original agent merge or earlier rejected pilot evidence.
+- The later protected workflow-only rollout produced current main
+  `a5c793ca3e912dbeb8405edfdfaef78017ead0ee`, a verified descendant of the agent merge.
+  [Full main CI40662028220](https://github.com/Sushant-Nemade/TravelBrain/actions/runs/40662028220)
+  and [proof-gated Pages40662530170](https://github.com/Sushant-Nemade/TravelBrain/actions/runs/40662530170)
+  both succeeded. [Trusted housekeeping40662759511](https://github.com/Sushant-Nemade/TravelBrain/actions/runs/40662759511)
+  verified the actual deployment job and recorded **deployed** in the durable report.
+  During setup this same six-hour scheduled job was dispatched for immediate
+  verification; routine future operation needs no owner start or approval.
 
 ## Earlier Executed Proof
 
@@ -130,7 +173,7 @@ a new PyPI/release version. Existing project CI remains the package/browser gate
 - Model: Qwen2.5-Coder-1.5B-Instruct-GGUF, Apache-2.0, immutable revision
   `f86cb2c1fa58255f8052cc32aeede1b7482d4361`; exact Q4_K_M SHA-256
   `cc324af070c2ecbfd324a30884d2f951a7ff756aba85cb811a6ec436933bb046`.
-- Separate reviewer for TravelBrain's approved queued repair: Qwen2.5-Coder-7B-Instruct-GGUF,
+- Separate reviewer, live-tested on TravelBrain's approved repair: Qwen2.5-Coder-7B-Instruct-GGUF,
   Apache-2.0, immutable revision `13fb94bfda8c8cf22497dc57b78f391a9acb426a`,
   file size4,683,073,536 bytes, SHA-256
   `509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c`.
