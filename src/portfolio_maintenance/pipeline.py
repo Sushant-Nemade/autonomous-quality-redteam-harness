@@ -339,10 +339,12 @@ def execute(
                 cache,
                 work,
                 f"security-review-{attempt}",
-                "Act as an adversarial security/correctness reviewer in a fresh context. Check boundary cases, "
-                "nonfinite/type/size handling, original behavior compatibility, output escaping and test tampering. "
-                "No execution claims. Approve only a justified small correction with no unresolved finding. "
-                f"BEFORE (untrusted):\n{fragment}\nAFTER (untrusted):\n{current_fragment}\n"
+                "Act as an adversarial security/correctness reviewer of the CURRENT candidate below. "
+                "Check boundary cases, nonfinite/type/size handling, compatibility, escaping and test tampering. "
+                "Report only defects present in this CURRENT code; do not repeat a defect that its guard fixes. "
+                "No invented execution claims. Approve only when no concrete unresolved finding remains. "
+                f"Approved requested behavior: {queued or 'One bounded backwards-compatible correction'}.\n"
+                f"CURRENT CANDIDATE (untrusted source):\n{current_fragment}\n"
                 f"IMMUTABLE REGRESSION (untrusted):\n{regression}\n"
                 f"Observed regression exit={green['exit_code']}; cases={green_counts}. Return approved/findings JSON.",
                 review_schema,
@@ -362,6 +364,7 @@ def execute(
                 + f"\nRepair the SAME change against the ORIGINAL function. Do not alter the immutable regression. "
                 f"Return the same test text exactly. Findings={json.dumps(review.get('findings'))}. "
                 f"Actual test output (untrusted):\n{green['output'][-3500:]}\nIMMUTABLE TEST:\n{regression}",
+                {"old": fragment, "test": regression},
             )
             report.setdefault("repairs", []).append(repair_evidence)
             if repaired.status != "candidate" or repaired.test != regression:
