@@ -48,7 +48,7 @@ def fixture_project(tmp_path):
     return project
 
 
-@pytest.mark.parametrize("decision_status", ["candidate", "no_change"])
+@pytest.mark.parametrize("decision_status", ["candidate", "no_change", "grounded"])
 def test_real_red_green_execution_precedes_candidate_publication(
     fixture_project, tmp_path, monkeypatch, decision_status
 ):
@@ -92,6 +92,11 @@ def test_real_red_green_execution_precedes_candidate_publication(
     monkeypatch.setattr(pipeline, "limited_process", trusted_process)
     monkeypatch.setattr(pipeline, "isolated", real_fixture_pytest)
     monkeypatch.setattr(pipeline, "prepare_model", lambda *args: None)
+    monkeypatch.setattr(
+        pipeline,
+        "queued_work",
+        lambda profile: ("Reject negative budgets", proposal.test) if decision_status == "grounded" else ("", ""),
+    )
     monkeypatch.setattr(pipeline, "author", lambda *args: (proposal, {"role": "fixture-author-not-live-AI"}))
     monkeypatch.setattr(
         pipeline,

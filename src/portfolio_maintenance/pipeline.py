@@ -18,6 +18,21 @@ from portfolio_maintenance.policy import (
 )
 
 
+def queued_work(profile: Profile) -> tuple[str, str]:
+    value = json.loads(Path(__file__).with_name("queued_tasks.json").read_text(encoding="utf-8")).get(
+        profile.repository, ""
+    )
+    if isinstance(value, str):
+        task, regression = value, ""
+    elif isinstance(value, dict) and set(value) == {"task", "regression"}:
+        task, regression = value["task"], value["regression"]
+    else:
+        raise ValueError("Invalid owner-approved queued work")
+    if not isinstance(task, str) or not isinstance(regression, str) or len(task) > 1000 or len(regression) > 5000:
+        raise ValueError("Queued work exceeds its reviewed bounds")
+    return task, regression
+
+
 def copy_tracked(source: Path, destination: Path) -> dict[str, str]:
     result = limited_process(["git", "ls-files", "-z"], cwd=source, timeout=60)
     if result["exit_code"] or result["truncated"]:
@@ -216,26 +231,50 @@ def execute(
             "required": ["status", "summary"],
             "additionalProperties": False,
         }
-        task_path = Path(__file__).with_name("queued_tasks.json")
-        queued = json.loads(task_path.read_text(encoding="utf-8")).get(profile.repository, "")
-        if not isinstance(queued, str) or len(queued) > 1000:
-            raise ValueError("Invalid bounded owner-approved maintenance task")
+        queued, approved_regression = queued_work(profile)
+        test_name = f"tests/test_daily_{run_date.replace('-', '')}.py"
+        approved_red_counts = None
         if queued:
             report["queued_task"] = queued
             prompt += "\nOwner-approved concrete work item: " + queued
-        decision, decision_evidence = model_json(
-            control,
-            cache,
-            work,
-            "planning",
-            "Inspect the following function for ONE concrete correctness defect that can be fixed locally. "
-            "Return only status=candidate with a concise defect summary, or status=no_change when no justified "
-            "small correction is apparent. Do not generate any code or tests in this decision. "
-            "No test/security execution claims.\n"
-            + fragment
-            + ("\nOwner-approved task: " + queued if queued else ""),
-            decision_schema,
-        )
+        if approved_regression:
+            if (project / test_name).exists():
+                return finish("blocked-duplicate-test", "A regression already exists for the selected date")
+            validate_test(approved_regression, profile)
+            (project / test_name).write_text(approved_regression, encoding="utf-8")
+            observed, approved_red_counts = stage("red-regression", [test_name])
+            verify_unchanged(project, inventory, {test_name: approved_regression})
+            if green_passed(observed["exit_code"], approved_red_counts):
+                return finish(
+                    "no-safe-change", "The approved regression already passes; no source change is needed"
+                )
+            if not red_passed(observed["exit_code"], approved_red_counts):
+                return finish("blocked-queued-regression", "Queued test did not demonstrate a behavioral failure")
+            decision = {"status": "candidate", "summary": queued[:300]}
+            decision_evidence = {
+                "role": "executed-regression",
+                "source": "actual RED against unchanged production source",
+            }
+            prompt += (
+                "\nThe approved regression was EXECUTED and FAILED behaviorally on current source. "
+                "Do not claim existing code already handles it. Fix the demonstrated defect. "
+                "Return the test field EXACTLY as this immutable approved regression:\n"
+                + approved_regression
+                + "\nActual test output:\n"
+                + observed["output"][-2500:]
+            )
+        else:
+            decision, decision_evidence = model_json(
+                control,
+                cache,
+                work,
+                "planning",
+                "Inspect the following function for ONE concrete correctness defect that can be fixed locally. "
+                "Return only status=candidate with a concise defect summary, or status=no_change when no justified "
+                "small correction is apparent. Do not generate code or tests in this decision. "
+                "No execution claims.\n" + fragment + ("\nOwner-approved task: " + queued if queued else ""),
+                decision_schema,
+            )
         report["planning"] = {"decision": decision, "provenance": decision_evidence}
         if decision.get("status") == "no_change":
             return finish("no-safe-change", str(decision["summary"])[:300])
@@ -246,14 +285,20 @@ def execute(
         )
         report["author"] = author_evidence
         if proposal.status == "no_change":
-            return finish("no-safe-change", proposal.summary)
-        test_name = f"tests/test_daily_{run_date.replace('-', '')}.py"
-        if (project / test_name).exists():
+            return finish(
+                "blocked-unresolved-regression" if approved_regression else "no-safe-change", proposal.summary
+            )
+        if not approved_regression and (project / test_name).exists():
             return finish("blocked-duplicate-test", "A regression already exists for the selected date")
+        if approved_regression and proposal.test != approved_regression:
+            return finish("rejected-regression-rewrite", "Author changed the demonstrated approved regression")
         validate_test(proposal.test, profile)
         changed = apply_proposal(original, proposal, profile.function)
         (project / test_name).write_text(proposal.test, encoding="utf-8")
-        red, red_counts = stage("red-regression", [test_name])
+        if approved_regression:
+            red, red_counts = {"exit_code": 1}, approved_red_counts
+        else:
+            red, red_counts = stage("red-regression", [test_name])
         verify_unchanged(project, inventory, {test_name: proposal.test})
         if not red_passed(red["exit_code"], red_counts):
             return finish(

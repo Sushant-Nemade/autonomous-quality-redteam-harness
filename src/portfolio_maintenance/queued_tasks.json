@@ -1,3 +1,6 @@
 {
-  "Sushant-Nemade/TravelBrain": "Reject a negative truncate limit with ValueError instead of returning most of the text. Keep existing str(value) conversion and behavior for zero/positive limits. A negative budget is invalid; verify with pytest.raises(ValueError). If this exact guard is already implemented, return no_change. Do not edit any other function."
+  "Sushant-Nemade/TravelBrain": {
+    "task": "Reject a negative truncate limit with ValueError instead of returning most of the text. Keep existing str(value) conversion and behavior for zero/positive limits. Fix only truncate; its return str(value)[:limit] currently has no negative guard.",
+    "regression": "import pytest\n\nfrom src.utils.async_utils import truncate\n\n\ndef test_negative_truncation_budget_is_rejected():\n    with pytest.raises(ValueError):\n        truncate(\"abcdef\", -1)\n\n\ndef test_valid_truncation_behavior_is_preserved():\n    assert truncate(123456, 3) == \"123\"\n    assert truncate(\"abcdef\", 0) == \"\"\n"
+  }
 }
