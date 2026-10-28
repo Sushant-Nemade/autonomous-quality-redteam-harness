@@ -1,6 +1,6 @@
-# Portfolio Maintenance And Legacy Quality Fixtures
+# Guarded Autonomous Portfolio Maintenance
 
-> **Activation status (2026-10-27):** the evidence-backed maintenance callers are
+> **Activation status (2026-10-28):** the evidence-backed maintenance callers are
 > published and active in all seven gallery references, scheduled for **12:00 noon
 > Europe/Berlin**. The first complete real pilot passed 27 tests, four integration
 > cases and 1,000 serial workflows; the model returned **no safe change**, so no PR
@@ -19,7 +19,11 @@
 - [Pinned reusable controller](.github/workflows/portfolio-maintenance.yml)
 
 Scheduled execution, tests, proposals, review loops and report publication are
-unattended. **Production merge remains human-reviewed.** The same small open-weight
+unattended. **The owner has authorized guarded automatic merging and deployment**
+for the approved bounded maintenance scope. Every existing independent CI job,
+exact-source check, regression and policy gate must pass; no routine manual PR
+approval is needed. Main branches require those checks even for administrators.
+See the runbook for reconciliation and stop controls. The same small open-weight
 model runs in separate author/reviewer contexts; it is not an independent security
 audit. A passing workflow can publish a blocked/no-change report, so inspect its
 actual outcome, not only the green Actions badge.

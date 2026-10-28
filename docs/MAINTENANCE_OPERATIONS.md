@@ -4,7 +4,7 @@
 
 As of 2026-10-27, `daily-maintenance.yml` is published and GitHub reports its state
 as active in all seven gallery reference repositories. Each caller is pinned to
-controller revision `dbe13f429cb7867d386d10f499e394a2d1d89948`, including its registry.
+controller revision `fab15f511967b52f886285322a82547db1df881a`, including its registry.
 This security maintenance pin includes `uv`0.13.4; the first complete pilot below
 ran the same proposal/model policy before that build-tool-only update.
 The fixed toolchain was subsequently exercised end to end by
@@ -31,7 +31,38 @@ separate diagnostic runs with separate durable keys, not daily-selection evidenc
 All future starts are best effort: GitHub can delay/drop schedules and disable
 public scheduled workflows after inactivity. No exact-start or uptime SLA is promised.
 
-## Executed Proof
+## Owner-Authorized Unattended Delivery
+
+On 2026-10-28 the owner explicitly authorized removal of routine manual PR approval.
+All seven repositories now have `MAINTENANCE_AUTO_MERGE=1`, protected main branches
+with the exact existing independent CI jobs required, strict up-to-date bases,
+administrator enforcement, PR-only/linear history, conversation resolution and
+no force pushes/deletions. There were no existing protection rules to weaken.
+
+The trusted completion hook executes only pinned controller code, never candidate
+code with write credentials. It verifies the original successful maintenance run,
+same-repository bot PR, exact head/base SHAs, two approved paths, complete real
+CI job results, demonstrated RED/GREEN evidence and unresolved-finding absence.
+Only then can it squash-merge the exact candidate without another owner approval.
+Failed/stale candidates are rejected/closed, allowing a future scheduled fresh attempt.
+
+The merged main SHA receives a separately dispatched full CI run. Six web apps
+deploy only successful current-main owner CI results from push or workflow dispatch.
+Doclify automatically builds verified wheel/source artifacts; no PyPI publishing
+identity is configured and no PyPI publication is claimed.
+
+Every project also reconciles delivery state at `17 */6 * * *` Europe/Berlin;
+this is housekeeping, not a second daily improvement selection. It catches missed
+CI events, retries missing post-merge dispatch at most twice and failed main CI
+once. Failed verification does not bypass deployment. Global/per-project stop
+controls still apply. Infrastructure, permissions or safety failures can stop a
+run; this is not a promise that every possible failure can repair itself.
+
+Earlier no-change pilots below prove actual execution, not automatic merging.
+The concrete negative-truncation-budget live pilot is separately recorded when it
+finishes; only its actual observed result may be described as a delivered change.
+
+## Earlier Executed Proof
 
 - [Actual model runtime40589962908](https://github.com/Sushant-Nemade/autonomous-quality-redteam-harness/actions/runs/40589962908): pinned 1.12GB Qwen GGUF checksum verified; pinned llama.cpp compiled;
   real schema-constrained CPU inference succeeded in a non-root, network-none container.
@@ -70,9 +101,11 @@ public scheduled workflows after inactivity. No exact-start or uptime SLA is pro
 7. A separate trusted publisher validates provenance, paths, function scope,
    observed gates and review outcome. It rejects main drift or duplicates, opens a
    normal PR, and explicitly dispatches ordinary project CI on that branch.
-8. A human reviews the PR and CI before merge. Existing successful-owner-push
-   deployment gates then publish the merged SHA. The automation never self-approves,
-   merges main, weakens existing tests or invokes production deployment directly.
+8. The separately trusted automatic-delivery guard validates the exact candidate
+  and all independent CI jobs against protected main. Authorized bounded changes
+  merge without routine human approval. Full main CI runs separately, and only its
+  successful current SHA can deploy. No self-review, test weakening, force push or
+  bypass of protected checks is permitted.
 
 No safe change, rejected regression and blocked baseline are valid report outcomes,
 not manufactured improvements. Existing provider tests use documented mocks and
@@ -99,9 +132,10 @@ a new PyPI/release version. Existing project CI remains the package/browser gate
 - Only one approved existing Python function and one date-named new test may be
   proposed. No imports/signatures, other functions, existing tests, dependency locks,
   workflows, auth, data, model weights, licenses or spending-policy edits.
-- The approved modules still need human review. Sandbox isolation limits impact;
+- Approved modules remain within the owner's narrowly authorized automatic scope.
+  Changes outside that scope are rejected rather than expanded silently. Sandbox isolation limits impact;
   static checks/JUnit are not proof that arbitrary generated code cannot misbehave
-  within its process. No automatic production trust is granted to a candidate.
+  within its process. Independent CI and the separate trusted guard are still mandatory.
 - The same 1.5B model in separate roles is not an independent pentester or a reliable
   substitute for expert review. False defect claims and no-change days are expected.
 
@@ -125,7 +159,7 @@ Scheduler job was installed by this implementation; the old fixture registration
 script is not an operational prerequisite or substitute for this cloud schedule.
 
 Reports live on each project's `maintenance-reports` branch as `latest.json`, a
-human-readable README, and immutable date/run-key records. Ordinary scheduled keys
+human-readable README, and versioned date/run-key records. Ordinary scheduled keys
 are deduplicated and per-project runs serialized. A pending maintenance PR prevents
 another proposal. GitHub artifacts retain detailed evidence for30days; durable
 sanitized reports remove test log tails and preserve counts/hashes/outcomes.
