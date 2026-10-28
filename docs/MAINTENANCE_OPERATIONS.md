@@ -4,7 +4,7 @@
 
 As of 2026-10-27, `daily-maintenance.yml` is published and GitHub reports its state
 as active in all seven gallery reference repositories. Each caller is pinned to
-controller revision `fab15f511967b52f886285322a82547db1df881a`, including its registry.
+controller revision `321a857ef17570906f01bf61164d0b8e59147ecc`, including its registry.
 This security maintenance pin includes `uv`0.13.4; the first complete pilot below
 ran the same proposal/model policy before that build-tool-only update.
 The fixed toolchain was subsequently exercised end to end by
@@ -45,6 +45,13 @@ same-repository bot PR, exact head/base SHAs, two approved paths, complete real
 CI job results, demonstrated RED/GREEN evidence and unresolved-finding absence.
 Only then can it squash-merge the exact candidate without another owner approval.
 Failed/stale candidates are rejected/closed, allowing a future scheduled fresh attempt.
+
+Approved concrete work may include a controller-owned immutable regression. That
+test is executed against unchanged source before the author runs. Already-green
+tests result in no change; observed RED becomes the author's evidence, and a model
+claim that the defect is already fixed cannot replace the actual test result.
+The seven controller pin updates themselves used protected PRs and native auto-merge
+after every required check, without temporarily disabling protection or admin bypass.
 
 The merged main SHA receives a separately dispatched full CI run. Six web apps
 deploy only successful current-main owner CI results from push or workflow dispatch.
