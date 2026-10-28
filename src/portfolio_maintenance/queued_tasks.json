@@ -1,0 +1,3 @@
+{
+  "Sushant-Nemade/TravelBrain": "Reject a negative truncate limit with ValueError instead of returning most of the text. Keep existing str(value) conversion and behavior for zero/positive limits. A negative budget is invalid; verify with pytest.raises(ValueError). If this exact guard is already implemented, return no_change. Do not edit any other function."
+}

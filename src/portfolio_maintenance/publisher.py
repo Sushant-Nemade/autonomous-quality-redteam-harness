@@ -132,6 +132,12 @@ def publish(work: Path, baseline: Path, key: str) -> dict:
     report = json.loads((work / "report.json").read_text(encoding="utf-8"))
     repository = report["repository"]
     profile = profile_for(repository)
+    automatic = os.environ.get("MAINTENANCE_AUTO_MERGE") == "1"
+    report.setdefault("policy", {}).update(
+        human_merge_required=not automatic,
+        automatic_production_merge=automatic,
+        independent_ci_required=True,
+    )
     if not re.fullmatch(r"maintenance-[0-9]{4}-[0-9]{2}-[0-9]{2}(-pilot-[0-9]+)?", key):
         raise ValueError("Invalid deduplication key")
     marker = api("GET", f"repos/{repository}/contents/runs/{key}.json?ref=maintenance-reports")
@@ -156,8 +162,15 @@ def publish(work: Path, baseline: Path, key: str) -> dict:
                 sha = branch_commit(
                     repository, branch, files, report["source_sha"], candidate["summary"], must_be_new=True
                 )
+                delivery_notice = (
+                    "**Unattended bounded delivery is authorized; independent CI and trusted eligibility validation remain mandatory.**"
+                    if automatic
+                    else "**Human review and independent project CI required; no automatic production merge.**"
+                )
                 body = (
-                    "Automated, bounded maintenance proposal. **Human review and independent project CI required; no automatic production merge.**\n\n"
+                    "Automated, bounded maintenance proposal. "
+                    + delivery_notice
+                    + "\n\n"
                     + candidate["summary"]
                     + "\n\nBaseline SHA: `"
                     + report["source_sha"]
@@ -181,10 +194,15 @@ def publish(work: Path, baseline: Path, key: str) -> dict:
                 report.update(
                     candidate_sha=sha,
                     pull_request=pull_request["html_url"],
-                    status="pull-request-awaiting-ci-and-human-review",
+                    pull_request_number=pull_request["number"],
+                    candidate_branch=branch,
+                    status="pull-request-awaiting-ci-auto-delivery"
+                    if automatic
+                    else "pull-request-awaiting-ci-and-human-review",
                 )
                 api("POST", f"repos/{repository}/actions/workflows/{profile.ci}/dispatches", {"ref": branch})
                 report["independent_ci_dispatched"] = True
+                report["ci_workflow"] = profile.ci
     report["published_at_utc"] = datetime.now(timezone.utc).isoformat()
     report["run_url"] = f"https://github.com/{repository}/actions/runs/{report['run_id']}"
     sanitized = dict(report)
@@ -203,7 +221,12 @@ def publish(work: Path, baseline: Path, key: str) -> dict:
                 f"- Detail: {str(report.get('detail', ''))[:800]}",
                 f"- Evidence: {report['run_url']}",
                 f"- Proposed PR: {report.get('pull_request', 'none')}",
-                "- Publication policy: reviewed PR only; no automatic main merge or production deployment.",
+                "- Publication policy: "
+                + (
+                    "authorized unattended merge only after independent CI and trusted eligibility checks."
+                    if automatic
+                    else "reviewed PR only; no automatic main merge or production deployment."
+                ),
                 "- A no-safe-change/rejected/blocked result is not a claimed improvement.",
             ]
         )

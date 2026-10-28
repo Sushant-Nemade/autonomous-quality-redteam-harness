@@ -128,6 +128,7 @@ jobs:
       - run: uv sync --frozen --project controller
       - env:
           GH_TOKEN: ${{ github.token }}
+          MAINTENANCE_AUTO_MERGE: ${{ vars.MAINTENANCE_AUTO_MERGE }}
           REPORT_KEY: ${{ needs.select.outputs.key }}
         run: |
           uv run --frozen --project controller portfolio-maintenance publish \

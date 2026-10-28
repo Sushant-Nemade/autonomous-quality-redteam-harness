@@ -141,6 +141,9 @@ def main() -> None:
     publishing.add_argument("--key", required=True)
     monitoring = subcommands.add_parser("monitor")
     monitoring.add_argument("--repository", default="Sushant-Nemade/autonomous-quality-redteam-harness")
+    delivering = subcommands.add_parser("deliver")
+    delivering.add_argument("--repository", required=True)
+    delivering.add_argument("--run-id")
     subcommands.add_parser("registry")
     args = parser.parse_args()
     if args.command == "preflight":
@@ -151,6 +154,12 @@ def main() -> None:
         result = publish(args.work, args.baseline, args.key)
     elif args.command == "monitor":
         result = monitor(args.repository)
+    elif args.command == "deliver":
+        from portfolio_maintenance.delivery import finalize, reconcile
+
+        result = finalize(args.repository, args.run_id) if args.run_id else reconcile(args.repository)
+        if args.run_id and str(result.get("status", "")).startswith("not-"):
+            result = reconcile(args.repository)
     else:
         result = [profile.model_dump() for profile in registry()]
     print(json.dumps(result, indent=2, allow_nan=False))

@@ -1,0 +1,47 @@
+name: Guarded Autonomous Maintenance Delivery
+on:
+  workflow_call:
+    inputs:
+      controller_ref:
+        type: string
+        required: true
+      completed_run_id:
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: guarded-maintenance-delivery
+  cancel-in-progress: false
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Sushant-Nemade/autonomous-quality-redteam-harness
+          ref: ${{ inputs.controller_ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.4'
+      - run: uv sync --frozen
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          MAINTENANCE_AUTO_MERGE: ${{ vars.MAINTENANCE_AUTO_MERGE }}
+          MAINTENANCE_DISABLED: ${{ vars.MAINTENANCE_DISABLED }}
+          COMPLETED_RUN_ID: ${{ inputs.completed_run_id }}
+        run: |
+          if [ -n "$COMPLETED_RUN_ID" ]; then
+            uv run --frozen portfolio-maintenance deliver --repository "$GITHUB_REPOSITORY" --run-id "$COMPLETED_RUN_ID"
+          else
+            uv run --frozen portfolio-maintenance deliver --repository "$GITHUB_REPOSITORY"
+          fi

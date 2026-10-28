@@ -216,6 +216,13 @@ def execute(
             "required": ["status", "summary"],
             "additionalProperties": False,
         }
+        task_path = Path(__file__).with_name("queued_tasks.json")
+        queued = json.loads(task_path.read_text(encoding="utf-8")).get(profile.repository, "")
+        if not isinstance(queued, str) or len(queued) > 1000:
+            raise ValueError("Invalid bounded owner-approved maintenance task")
+        if queued:
+            report["queued_task"] = queued
+            prompt += "\nOwner-approved concrete work item: " + queued
         decision, decision_evidence = model_json(
             control,
             cache,
@@ -224,7 +231,9 @@ def execute(
             "Inspect the following function for ONE concrete correctness defect that can be fixed locally. "
             "Return only status=candidate with a concise defect summary, or status=no_change when no justified "
             "small correction is apparent. Do not generate any code or tests in this decision. "
-            "No test/security execution claims.\n" + fragment,
+            "No test/security execution claims.\n"
+            + fragment
+            + ("\nOwner-approved task: " + queued if queued else ""),
             decision_schema,
         )
         report["planning"] = {"decision": decision, "provenance": decision_evidence}

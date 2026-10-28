@@ -9,6 +9,27 @@ from portfolio_maintenance.policy import Proposal, profile_for
 from portfolio_maintenance.publisher import validate_candidate
 
 
+def test_authorized_unattended_delivery_does_not_require_routine_human_approval(tmp_path, monkeypatch):
+    from portfolio_maintenance import publisher
+
+    monkeypatch.setenv("MAINTENANCE_AUTO_MERGE", "1")
+    report = {
+        "repository": "Sushant-Nemade/TravelBrain",
+        "source_sha": "a" * 40,
+        "berlin_date": "2026-10-28",
+        "run_id": "123",
+        "status": "no-safe-change",
+        "stages": [],
+        "policy": {"human_merge_required": True, "automatic_production_merge": False},
+    }
+    (tmp_path / "report.json").write_text(json.dumps(report), encoding="utf-8")
+    monkeypatch.setattr(publisher, "api", lambda *args: None)
+    monkeypatch.setattr(publisher, "branch_commit", lambda *args, **kwargs: "b" * 40)
+    actual = publisher.publish(tmp_path, tmp_path, "maintenance-2026-10-28")
+    assert actual["policy"]["human_merge_required"] is False
+    assert actual["policy"]["automatic_production_merge"] is True
+
+
 @pytest.fixture
 def fixture_project(tmp_path):
     project = tmp_path / "source"
