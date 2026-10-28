@@ -185,6 +185,7 @@ def model_json(control: Path, cache: Path, work: Path, role: str, prompt: str, s
             checksum,
             expected_size=REVIEWER_BYTES,
         )
+        (cache / "reviewer-verified.sha256").write_text(REVIEWER_SHA256, encoding="ascii")
     folder = work / (role + "-" + uuid4().hex[:8])
     folder.mkdir(parents=True)
     message = (

@@ -176,7 +176,7 @@ def publish(work: Path, baseline: Path, key: str) -> dict:
                     + report["source_sha"]
                     + "`\n\n"
                     "Observed behavioral RED then GREEN, existing unit/integration suites, and separate local-model review are recorded in the linked Actions run. "
-                    "The same small model is used in fresh author/reviewer contexts; this is not independent security certification. "
+                    "Pinned offline model roles run in fresh contexts; automated review is not independent human security certification. "
                     "Load adapter status is explicit in the report; no 1,000-user capacity claim is made.\n\n"
                     f"Evidence: https://github.com/{repository}/actions/runs/{report['run_id']}\n"
                 )

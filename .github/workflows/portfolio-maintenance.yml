@@ -71,10 +71,12 @@ jobs:
         with:
           version: '0.13.4'
       - run: uv sync --frozen --project controller
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: model-cache
         with:
           path: .cache/maintenance
-          key: maintenance-model-f86cb2c1-llama-a9191799-v1
+          key: maintenance-model-f86cb2c1-review13fb94bf-llama-a9191799-v2
+          restore-keys: maintenance-model-f86cb2c1-llama-a9191799-v1
       - env:
           SOURCE_SHA: ${{ needs.select.outputs.source_sha }}
           RUN_DATE: ${{ needs.select.outputs.date }}
@@ -85,6 +87,11 @@ jobs:
             --work "$GITHUB_WORKSPACE/work" --cache "$GITHUB_WORKSPACE/.cache/maintenance" \
             --repository "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" \
             --date "$RUN_DATE" --run-id "$GITHUB_RUN_ID" --skip-reason "$SKIP_REASON"
+      - uses: actions/cache/save@v4
+        if: always() && steps.model-cache.outputs.cache-hit != 'true' && hashFiles('.cache/maintenance/reviewer-verified.sha256') != ''
+        with:
+          path: .cache/maintenance
+          key: maintenance-model-f86cb2c1-review13fb94bf-llama-a9191799-v2
       - uses: actions/upload-artifact@v4
         if: always()
         with:
