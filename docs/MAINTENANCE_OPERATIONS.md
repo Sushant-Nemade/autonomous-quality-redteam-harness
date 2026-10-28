@@ -130,11 +130,19 @@ a new PyPI/release version. Existing project CI remains the package/browser gate
 - Model: Qwen2.5-Coder-1.5B-Instruct-GGUF, Apache-2.0, immutable revision
   `f86cb2c1fa58255f8052cc32aeede1b7482d4361`; exact Q4_K_M SHA-256
   `cc324af070c2ecbfd324a30884d2f951a7ff756aba85cb811a6ec436933bb046`.
+- Separate reviewer for TravelBrain's approved queued repair: Qwen2.5-Coder-7B-Instruct-GGUF,
+  Apache-2.0, immutable revision `13fb94bfda8c8cf22497dc57b78f391a9acb426a`,
+  file size4,683,073,536 bytes, SHA-256
+  `509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c`.
+  It replaces the repeatedly contradicted smaller reviewer, not the real tests.
+  Its rollout must still pass protected project CI. Full upstream license and
+  provenance are retained under maintenance/third-party and in the verified cache.
 - Runtime: llama.cpp `a919179942157e0554f92c1c6f31ac874f50b40a`, MIT.
   No paid AI credential or inference API is used. GitHub compute/storage policies
   still apply; standard public-runner eligibility is not a permanent billing promise.
 - Generated code and model run non-root, no network, read-only root/source,
-  no capabilities, no-new-privileges, max4GB RAM/2CPU/128PIDs, bounded tmpfs and
+  no capabilities, no-new-privileges, max4GB RAM for actor/project tests or8GB for
+  the separate7B reviewer, 2CPU/128PIDs, bounded tmpfs and
   output/file limits. No GitHub token, Docker socket or provider secret is mounted.
 - Max7 model calls, 1,700 output tokens each, 8,192 context tokens, two repairs.
   Per subprocess deadlines plus a 45-minute budget checked between stages and a 55-minute job cap
@@ -146,8 +154,9 @@ a new PyPI/release version. Existing project CI remains the package/browser gate
   Changes outside that scope are rejected rather than expanded silently. Sandbox isolation limits impact;
   static checks/JUnit are not proof that arbitrary generated code cannot misbehave
   within its process. Independent CI and the separate trusted guard are still mandatory.
-- The same 1.5B model in separate roles is not an independent pentester or a reliable
-  substitute for expert review. False defect claims and no-change days are expected.
+- Automated model review, including a separate larger reviewer, is not independent
+  human pentest certification or a substitute for expert review. False defect claims,
+  rejected repairs and no-change days remain possible; no passing result is fabricated.
 
 Six profiles are **serial regression repetitions**, with concurrency1 and no
 independently counted HTTP request total. Boston uses max16 active local journeys,
