@@ -64,3 +64,32 @@ def test_completion_preserves_generated_token_output_while_suppressing_metadata(
         "llama-completion emits generated tokens through generic LOG; disabling logs removes the answer"
     )
     assert calls[0][calls[0].index("--log-verbosity") + 1] == "0"
+
+
+def test_executed_red_cannot_be_reclassified_as_no_change_or_rewrite_its_test(tmp_path, monkeypatch):
+    from portfolio_maintenance import executor
+
+    observed = []
+
+    def response(control, cache, work, role, prompt, schema):
+        observed.append(schema)
+        return {
+            "status": "candidate",
+            "summary": "Reject a negative budget",
+            "old": "return value",
+            "new": "return value[:1]",
+            "test": "assert True",
+        }, {}
+
+    monkeypatch.setattr(executor, "model_json", response)
+    executor.author(
+        tmp_path,
+        tmp_path,
+        tmp_path,
+        "author",
+        "Repair executed RED",
+        {"old": "return value", "test": "assert True"},
+    )
+    assert observed[0]["properties"]["status"]["const"] == "candidate"
+    assert observed[0]["properties"]["old"]["const"] == "return value"
+    assert observed[0]["properties"]["test"]["const"] == "assert True"

@@ -281,7 +281,20 @@ def execute(
         if decision.get("status") != "candidate":
             return finish("rejected-planning", "Model decision did not match the reviewed contract")
         proposal, author_evidence = author(
-            control, cache, work, "author", prompt + "\nPlanned defect: " + str(decision["summary"])
+            control,
+            cache,
+            work,
+            "author",
+            prompt
+            + "\nPlanned defect: "
+            + str(decision["summary"])
+            + (
+                "\nThe controller has established RED. Return candidate and implement the requested production guard. "
+                "The failing test describes desired behavior, not existing source. Do not copy test logic into production."
+                if approved_regression
+                else ""
+            ),
+            {"old": fragment, "test": approved_regression} if approved_regression else None,
         )
         report["author"] = author_evidence
         if proposal.status == "no_change":

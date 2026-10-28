@@ -222,6 +222,13 @@ def model_json(control: Path, cache: Path, work: Path, role: str, prompt: str, s
     return payload, evidence
 
 
-def author(control: Path, cache: Path, work: Path, role: str, prompt: str) -> tuple[Proposal, dict]:
-    payload, evidence = model_json(control, cache, work, role, prompt, Proposal.model_json_schema())
+def author(
+    control: Path, cache: Path, work: Path, role: str, prompt: str, locked_regression: dict | None = None
+) -> tuple[Proposal, dict]:
+    schema = Proposal.model_json_schema()
+    if locked_regression:
+        schema["properties"]["status"] = {"type": "string", "const": "candidate"}
+        for field in ["old", "test"]:
+            schema["properties"][field] = {"type": "string", "const": locked_regression[field]}
+    payload, evidence = model_json(control, cache, work, role, prompt, schema)
     return Proposal.model_validate(payload), evidence
