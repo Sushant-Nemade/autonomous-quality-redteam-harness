@@ -48,7 +48,7 @@ def fixture_project(tmp_path):
     return project
 
 
-@pytest.mark.parametrize("decision_status", ["candidate", "no_change", "grounded"])
+@pytest.mark.parametrize("decision_status", ["candidate", "no_change", "grounded", "grounded-repair"])
 def test_real_red_green_execution_precedes_candidate_publication(
     fixture_project, tmp_path, monkeypatch, decision_status
 ):
@@ -95,19 +95,32 @@ def test_real_red_green_execution_precedes_candidate_publication(
     monkeypatch.setattr(
         pipeline,
         "queued_work",
-        lambda profile: ("Reject negative budgets", proposal.test) if decision_status == "grounded" else ("", ""),
-    )
-    monkeypatch.setattr(pipeline, "author", lambda *args: (proposal, {"role": "fixture-author-not-live-AI"}))
-    monkeypatch.setattr(
-        pipeline,
-        "model_json",
-        lambda *args: (
-            {"status": decision_status, "summary": "Reject negative truncation budgets"}
-            if args[3] == "planning"
-            else {"approved": True, "findings": []},
-            {"role": "fixture-decision-review-not-live-AI"},
+        lambda profile: (
+            ("Reject negative budgets", proposal.test) if decision_status.startswith("grounded") else ("", "")
         ),
     )
+
+    def checked_author(*args):
+        if args[3].startswith("repair-"):
+            assert args[-1]["test"] == proposal.test
+            assert args[-1]["old"].startswith("def truncate")
+        return proposal, {"role": "fixture-author-not-live-AI"}
+
+    def checked_review(*args):
+        if args[3] == "planning":
+            return {"status": decision_status, "summary": "Reject negative truncation budgets"}, {
+                "role": "fixture-planning"
+            }
+        assert "CURRENT CANDIDATE" in args[4]
+        assert "BEFORE (untrusted)" not in args[4]
+        approved = not (decision_status == "grounded-repair" and args[3] == "security-review-0")
+        return {
+            "approved": approved,
+            "findings": [] if approved else ["Fixture finding forces one immutable repair turn"],
+        }, {"role": "fixture-review"}
+
+    monkeypatch.setattr(pipeline, "author", checked_author)
+    monkeypatch.setattr(pipeline, "model_json", checked_review)
     profile = profile_for("Sushant-Nemade/TravelBrain")
     report = execute(
         tmp_path, fixture_project, tmp_path / "work", tmp_path / "cache", profile, "a" * 40, "2026-10-28", "123"
@@ -125,6 +138,8 @@ def test_real_red_green_execution_precedes_candidate_publication(
     assert stages["red-regression"]["exit_code"] == 1
     assert stages["red-regression"]["junit"]["failures"] == 1
     assert stages["final-unit-and-integration"]["junit"]["passed"] == 2
+    if decision_status == "grounded-repair":
+        assert len(report["repairs"]) == 1
     candidate = json.loads((tmp_path / "work/candidate.json").read_text())
     assert set(validate_candidate(candidate, report, fixture_project)) == {profile.file, candidate["test_path"]}
     candidate["files"][".github/workflows/ci.yml"] = "forbidden"
