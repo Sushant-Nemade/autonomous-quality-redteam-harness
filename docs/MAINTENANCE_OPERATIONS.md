@@ -5,8 +5,8 @@
 As of 2026-10-27, `daily-maintenance.yml` is published and GitHub reports its state
 as active in all seven gallery reference repositories. Six callers are pinned to
 controller revision `321a857ef17570906f01bf61164d0b8e59147ecc`; TravelBrain uses
-`8e801bc1cd24c74c60f921f61586e2da2b2866e6` for the demonstrated-RED typed repair
-contract. Both pins retain the same registry, schedule, isolation and protected
+`5fc31e5684790f0bc7d7ba1417c1c2f2353d0880` for the demonstrated-RED typed repair
+contract and separately pinned larger offline reviewer. Both pins retain the same registry, schedule, isolation and protected
 automatic-delivery guard. Configuration updates used ordinary protected PRs.
 This security maintenance pin includes `uv`0.13.4; the first complete pilot below
 ran the same proposal/model policy before that build-tool-only update.

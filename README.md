@@ -23,8 +23,8 @@ unattended. **The owner has authorized guarded automatic merging and deployment*
 for the approved bounded maintenance scope. Every existing independent CI job,
 exact-source check, regression and policy gate must pass; no routine manual PR
 approval is needed. Main branches require those checks even for administrators.
-See the runbook for reconciliation and stop controls. The same small open-weight
-model runs in separate author/reviewer contexts; it is not an independent security
+See the runbook for reconciliation and stop controls. Pinned offline model
+roles run in separate contexts; automated review is not an independent human security
 audit. A passing workflow can publish a blocked/no-change report, so inspect its
 actual outcome, not only the green Actions badge.
 
