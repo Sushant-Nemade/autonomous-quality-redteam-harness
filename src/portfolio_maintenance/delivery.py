@@ -75,6 +75,36 @@ def assert_ci_proof(repository: str, pull_request: dict, run: dict, jobs: list[d
         raise ValueError("Every required independent CI job must succeed")
 
 
+def approve_owned_candidate_ci(repository: str, pull_request: dict) -> list[int]:
+    profile = profile_for(repository)
+    head = pull_request.get("head", {})
+    if (
+        pull_request.get("user", {}).get("login") != "github-actions[bot]"
+        or head.get("repo", {}).get("full_name") != repository
+        or pull_request.get("base", {}).get("repo", {}).get("full_name") != repository
+        or not re.fullmatch(r"maintenance/maintenance-\d{4}-\d{2}-\d{2}(-pilot-\d+)?", head.get("ref", ""))
+        or not re.fullmatch(r"[a-f0-9]{40}", head.get("sha", ""))
+    ):
+        raise ValueError("Only the exact owned maintenance bot candidate may receive workflow approval")
+    runs = api(
+        "GET",
+        f"repos/{repository}/actions/workflows/{profile.ci}/runs?event=pull_request&head_sha={head['sha']}&per_page=20",
+    )["workflow_runs"]
+    approved = []
+    for run in runs:
+        if (
+            run.get("conclusion") == "action_required"
+            and run.get("event") == "pull_request"
+            and run.get("head_sha") == head["sha"]
+            and run.get("head_branch") == head["ref"]
+            and run.get("path") == ".github/workflows/" + profile.ci
+            and run.get("head_repository", {}).get("full_name") == repository
+        ):
+            api("POST", f"repos/{repository}/actions/runs/{run['id']}/approve", {})
+            approved.append(run["id"])
+    return approved
+
+
 def persist_delivery(repository: str, key: str, report: dict) -> None:
     report["delivery_updated_at_utc"] = datetime.now(timezone.utc).isoformat()
     text = json.dumps(report, indent=2, allow_nan=False) + "\n"
@@ -196,6 +226,20 @@ def finalize(repository: str, run_id: str) -> dict:
             target.parent.mkdir(parents=True)
             target.write_text(original, encoding="utf-8")
             validate_candidate(candidate, validation_report, baseline)
+        approved = approve_owned_candidate_ci(repository, pull_request)
+        if approved:
+            report.setdefault("automatically_approved_owned_ci_runs", []).extend(approved)
+        fresh = api("GET", f"repos/{repository}/pulls/{pull_request['number']}")
+        if fresh["head"]["sha"] != run["head_sha"]:
+            raise ValueError("Candidate changed after independent verification")
+        if fresh.get("mergeable_state") != "clean":
+            report.update(
+                status="awaiting-native-required-checks",
+                independent_ci_run=run_id,
+                detail="Independent exact-SHA CI passed; native PR checks are still running or settling. No bypass or routine manual approval is required.",
+            )
+            persist_delivery(repository, key, report)
+            return report
         result = api(
             "PUT",
             f"repos/{repository}/pulls/{pull_request['number']}/merge",
@@ -299,6 +343,7 @@ def reconcile(repository: str) -> dict:
         return report
     if pull_request.get("state") != "open":
         return {"status": "candidate-already-closed"}
+    approve_owned_candidate_ci(repository, pull_request)
     branch = pull_request["head"]["ref"]
     runs = api(
         "GET",

@@ -13,6 +13,7 @@ def proof():
     branch = "maintenance/maintenance-2026-10-28"
     pull_request = {
         "state": "open",
+        "mergeable_state": "clean",
         "draft": False,
         "user": {"login": "github-actions[bot]"},
         "base": {"ref": "main", "repo": {"full_name": repository}},
@@ -71,12 +72,17 @@ def test_fork_and_nonbot_prs_cannot_gain_automatic_delivery(proof):
         assert_ci_proof(repository, pull_request, run, jobs)
 
 
-@pytest.mark.parametrize("conclusion,attempt", [("success", 1), ("failure", 1), ("failure", 2)])
-def test_complete_trusted_delivery_merges_exact_sha_and_dispatches_main(proof, monkeypatch, conclusion, attempt):
+@pytest.mark.parametrize(
+    "conclusion,attempt,native_state",
+    [("success", 1, "clean"), ("success", 1, "blocked"), ("failure", 1, "clean"), ("failure", 2, "clean")],
+)
+def test_complete_trusted_delivery_merges_exact_sha_and_dispatches_main(
+    proof, monkeypatch, conclusion, attempt, native_state
+):
     from portfolio_maintenance import cli, delivery
 
     repository, pull_request, run, jobs = deepcopy(proof)
-    pull_request.update(number=1)
+    pull_request.update(number=1, mergeable_state=native_state)
     run.update(conclusion=conclusion, run_attempt=attempt)
     original = "def truncate(value, limit):\n    return str(value)[:limit]\n"
     changed = "def truncate(value, limit):\n    if limit < 0:\n        raise ValueError('negative budget')\n    return str(value)[:limit]\n"
@@ -120,6 +126,8 @@ def test_complete_trusted_delivery_merges_exact_sha_and_dispatches_main(proof, m
         calls.append((method, path, payload))
         if path.endswith("/rerun") or path.endswith("/comments"):
             return {}
+        if "/runs?event=pull_request" in path:
+            return {"workflow_runs": []}
         if path.endswith("/actions/runs/456"):
             return run
         if path.endswith("/actions/runs/123"):
@@ -167,6 +175,11 @@ def test_complete_trusted_delivery_merges_exact_sha_and_dispatches_main(proof, m
         )
         assert not any(method == "PUT" and path.endswith("/merge") for method, path, _ in calls)
         assert any(path.endswith("/rerun") for _, path, _ in calls) is (attempt == 1)
+        return
+    if native_state != "clean":
+        assert result["status"] == "awaiting-native-required-checks"
+        assert not any(method == "PUT" and path.endswith("/merge") for method, path, _ in calls)
+        assert not any(method == "PATCH" for method, _, _ in calls)
         return
     assert result["merged_sha"] == "c" * 40
     assert result["main_verification_dispatched"]
@@ -216,3 +229,28 @@ def test_reconciliation_retries_missing_main_ci_without_an_unbounded_loop(proof,
     result = delivery.reconcile(repository)
     assert result["status"] == expected
     assert sum(method == "POST" for method, _, _ in calls) == (1 if attempts == 0 else 0)
+
+
+def test_only_matching_owned_bot_run_receives_execution_approval(proof, monkeypatch):
+    from portfolio_maintenance import delivery
+
+    repository, pull_request, run, _ = deepcopy(proof)
+    waiting = {**run, "id": 77, "event": "pull_request", "conclusion": "action_required"}
+    foreign = {**waiting, "id": 78, "head_repository": {"full_name": "other-owner/TravelBrain"}}
+    calls = []
+
+    def fake_api(method, path, payload=None):
+        calls.append((method, path))
+        if method == "GET":
+            return {"workflow_runs": [waiting, foreign]}
+        assert path.endswith("/77/approve") and payload == {}
+        return {}
+
+    monkeypatch.setattr(delivery, "api", fake_api)
+    assert delivery.approve_owned_candidate_ci(repository, pull_request) == [77]
+    assert sum(method == "POST" for method, _ in calls) == 1
+    pull_request["user"]["login"] = "someone-else"
+    before = len(calls)
+    with pytest.raises(ValueError):
+        delivery.approve_owned_candidate_ci(repository, pull_request)
+    assert len(calls) == before

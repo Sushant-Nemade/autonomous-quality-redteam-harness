@@ -205,6 +205,14 @@ def publish(work: Path, baseline: Path, key: str) -> dict:
                 report["ci_workflow"] = profile.ci
     report["published_at_utc"] = datetime.now(timezone.utc).isoformat()
     report["run_url"] = f"https://github.com/{repository}/actions/runs/{report['run_id']}"
+    if automatic and report.get("pull_request_number"):
+        from portfolio_maintenance.delivery import approve_owned_candidate_ci
+
+        pull_request = api("GET", f"repos/{repository}/pulls/{report['pull_request_number']}")
+        try:
+            report["automatically_approved_owned_ci_runs"] = approve_owned_candidate_ci(repository, pull_request)
+        except RuntimeError as error:
+            report["owned_ci_approval_pending"] = str(error)
     sanitized = dict(report)
     sanitized["stages"] = [
         {key: value for key, value in stage.items() if key != "log_tail"} for stage in report.get("stages", [])
