@@ -160,3 +160,48 @@ def test_complete_trusted_delivery_merges_exact_sha_and_dispatches_main(proof, m
     assert result["merged_sha"] == "c" * 40
     assert result["main_verification_dispatched"]
     assert any(method == "PUT" and path.endswith("/merge") for method, path, _ in calls)
+
+
+@pytest.mark.parametrize(
+    "attempts,expected", [(0, "merged-awaiting-main-verification"), (2, "blocked-main-verification-dispatch")]
+)
+def test_reconciliation_retries_missing_main_ci_without_an_unbounded_loop(proof, monkeypatch, attempts, expected):
+    from portfolio_maintenance import cli, delivery
+
+    repository, pull_request, _, _ = deepcopy(proof)
+    pull_request.update(number=1, merged=True, merge_commit_sha="c" * 40)
+    report = {
+        "repository": repository,
+        "source_sha": "a" * 40,
+        "candidate_sha": "b" * 40,
+        "candidate_branch": pull_request["head"]["ref"],
+        "pull_request_number": 1,
+        "run_id": "123",
+        "policy": {"automatic_production_merge": True},
+        "main_dispatch_attempts": attempts,
+    }
+    calls = []
+
+    def fake_api(method, path, payload=None):
+        calls.append((method, path, payload))
+        if "/contents/latest.json" in path:
+            return {"content": base64.b64encode(json.dumps(report).encode()).decode()}
+        if path.endswith("/pulls/1"):
+            return pull_request
+        if path.endswith("/git/ref/heads/main"):
+            return {"object": {"sha": "c" * 40}}
+        if "/runs?branch=main" in path:
+            return {"workflow_runs": []}
+        if path.endswith("/dispatches"):
+            assert payload == {"ref": "main"}
+            return {}
+        raise AssertionError((method, path))
+
+    monkeypatch.setenv("MAINTENANCE_AUTO_MERGE", "1")
+    monkeypatch.delenv("MAINTENANCE_DISABLED", raising=False)
+    monkeypatch.setattr(cli, "globally_paused", lambda: False)
+    monkeypatch.setattr(delivery, "api", fake_api)
+    monkeypatch.setattr(delivery, "persist_delivery", lambda *args: None)
+    result = delivery.reconcile(repository)
+    assert result["status"] == expected
+    assert sum(method == "POST" for method, _, _ in calls) == (1 if attempts == 0 else 0)
